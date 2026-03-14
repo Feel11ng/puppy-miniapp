@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>VIP Чихуахуа</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <!-- Шапка -->
+        <div class="header">
+            <div class="header-icon">🐕</div>
+            <div class="header-text">
+                <h1 id="kennel-name">VIP Чихуахуа</h1>
+                <p class="subtitle">Управление питомником</p>
+            </div>
+        </div>
+
+        <!-- Статистика -->
+        <div class="stats-bar" id="stats-bar">
+            <div class="stat-item">
+                <span class="stat-number" id="stat-sale">—</span>
+                <span class="stat-label">В продаже</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="stat-sold">—</span>
+                <span class="stat-label">Продано</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-number" id="stat-queue">—</span>
+                <span class="stat-label">В очереди</span>
+            </div>
+        </div>
+
+        <!-- Навигация -->
+        <div class="nav-grid" id="main-menu">
+            <div class="nav-card" onclick="navigate('create-post')">
+                <div class="nav-icon">📝</div>
+                <div class="nav-title">Создать пост</div>
+                <div class="nav-desc">Фото → AI → Публикация</div>
+            </div>
+            <div class="nav-card" onclick="navigate('puppies')">
+                <div class="nav-icon">🐶</div>
+                <div class="nav-title">Мои щенки</div>
+                <div class="nav-desc">База и карточки</div>
+            </div>
+            <div class="nav-card" onclick="navigate('ai')">
+                <div class="nav-icon">🤖</div>
+                <div class="nav-title">AI-помощник</div>
+                <div class="nav-desc">Тексты и идеи</div>
+            </div>
+            <div class="nav-card" onclick="navigate('analytics')">
+                <div class="nav-icon">📊</div>
+                <div class="nav-title">Аналитика</div>
+                <div class="nav-desc">Подписчики</div>
+            </div>
+            <div class="nav-card" onclick="navigate('autopost')">
+                <div class="nav-icon">📅</div>
+                <div class="nav-title">Автопостинг</div>
+                <div class="nav-desc">По расписанию</div>
+            </div>
+            <div class="nav-card" onclick="navigate('avito')">
+                <div class="nav-icon">📦</div>
+                <div class="nav-title">Авито</div>
+                <div class="nav-desc">Объявления</div>
+            </div>
+        </div>
+
+        <!-- Щенки в продаже -->
+        <div class="section" id="puppies-preview">
+            <div class="section-header">
+                <h2>🐶 Щенки в продаже</h2>
+                <span class="section-link" onclick="navigate('puppies')">Все →</span>
+            </div>
+            <div class="puppies-list" id="puppies-list">
+                <div class="loading">Загрузка...</div>
+            </div>
+        </div>
+
+        <!-- Экран: Мои щенки -->
+        <div class="screen" id="screen-puppies" style="display:none">
+            <div class="screen-header">
+                <button class="back-btn" onclick="goHome()">← Назад</button>
+                <h2>🐶 Мои щенки</h2>
+            </div>
+            <div class="puppies-full-list" id="puppies-full-list"></div>
+            <button class="btn btn-primary btn-full" onclick="sendCommand('add_puppy')">
+                ➕ Добавить щенка
+            </button>
+        </div>
+
+        <!-- Экран: Создать пост -->
+        <div class="screen" id="screen-create-post" style="display:none">
+            <div class="screen-header">
+                <button class="back-btn" onclick="goHome()">← Назад</button>
+                <h2>📝 Создать пост</h2>
+            </div>
+            <div class="post-options">
+                <div class="option-card" onclick="sendCommand('post_photo')">
+                    <span class="option-icon">📸</span>
+                    <span class="option-text">Фото-пост</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('post_video')">
+                    <span class="option-icon">🎬</span>
+                    <span class="option-text">Видео</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('post_reel')">
+                    <span class="option-icon">📱</span>
+                    <span class="option-text">Reels</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('post_carousel')">
+                    <span class="option-icon">📂</span>
+                    <span class="option-text">Карусель</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('post_story')">
+                    <span class="option-icon">📱</span>
+                    <span class="option-text">Stories</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('post_text')">
+                    <span class="option-icon">📖</span>
+                    <span class="option-text">Текст</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран: AI-помощник -->
+        <div class="screen" id="screen-ai" style="display:none">
+            <div class="screen-header">
+                <button class="back-btn" onclick="goHome()">← Назад</button>
+                <h2>🤖 AI-помощник</h2>
+            </div>
+            <div class="ai-options">
+                <div class="option-card" onclick="sendCommand('ai_desc')">
+                    <span class="option-icon">✍️</span>
+                    <span class="option-text">Описание щенка</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('ai_avito')">
+                    <span class="option-icon">📦</span>
+                    <span class="option-text">Текст для Авито</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('ai_idea')">
+                    <span class="option-icon">💡</span>
+                    <span class="option-text">Идея для поста</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('ai_reels')">
+                    <span class="option-icon">🎬</span>
+                    <span class="option-text">Идея для Reels</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('ai_hashtags')">
+                    <span class="option-icon">#️⃣</span>
+                    <span class="option-text">Хештеги</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('ai_plan')">
+                    <span class="option-icon">📅</span>
+                    <span class="option-text">План на неделю</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('ai_reply')">
+                    <span class="option-icon">💬</span>
+                    <span class="option-text">Ответ клиенту</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран: Аналитика -->
+        <div class="screen" id="screen-analytics" style="display:none">
+            <div class="screen-header">
+                <button class="back-btn" onclick="goHome()">← Назад</button>
+                <h2>📊 Аналитика</h2>
+            </div>
+            <div class="analytics-cards">
+                <div class="analytics-card instagram">
+                    <div class="analytics-icon">📸</div>
+                    <div class="analytics-platform">Instagram</div>
+                    <div class="analytics-count" id="ig-count">—</div>
+                    <div class="analytics-label">подписчиков</div>
+                </div>
+                <div class="analytics-card vk">
+                    <div class="analytics-icon">📘</div>
+                    <div class="analytics-platform">ВКонтакте</div>
+                    <div class="analytics-count" id="vk-count">—</div>
+                    <div class="analytics-label">участников</div>
+                </div>
+                <div class="analytics-card telegram">
+                    <div class="analytics-icon">✈️</div>
+                    <div class="analytics-platform">Telegram</div>
+                    <div class="analytics-count" id="tg-count">—</div>
+                    <div class="analytics-label">подписчиков</div>
+                </div>
+            </div>
+            <div class="total-box">
+                <span>📊 Всего аудитория:</span>
+                <span class="total-count" id="total-count">—</span>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="sendCommand('refresh_stats')">
+                🔄 Обновить статистику
+            </button>
+        </div>
+
+        <!-- Экран: Автопостинг -->
+        <div class="screen" id="screen-autopost" style="display:none">
+            <div class="screen-header">
+                <button class="back-btn" onclick="goHome()">← Назад</button>
+                <h2>📅 Автопостинг</h2>
+            </div>
+            <div class="autopost-status" id="autopost-status">
+                <div class="status-indicator off" id="autopost-indicator">Выключен</div>
+            </div>
+            <div class="autopost-options">
+                <div class="option-card" onclick="sendCommand('autopost_toggle')">
+                    <span class="option-icon">⚡</span>
+                    <span class="option-text">Включить / Выключить</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('autopost_times')">
+                    <span class="option-icon">⏰</span>
+                    <span class="option-text">Настроить время</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('autopost_queue')">
+                    <span class="option-icon">📋</span>
+                    <span class="option-text">Очередь постов</span>
+                </div>
+                <div class="option-card" onclick="sendCommand('autopost_ai')">
+                    <span class="option-icon">🤖</span>
+                    <span class="option-text">AI заполнит на неделю</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран: Авито -->
+        <div class="screen" id="screen-avito" style="display:none">
+            <div class="screen-header">
+                <button class="back-btn" onclick="goHome()">← Назад</button>
+                <h2>📦 Авито</h2>
+            </div>
+            <div class="avito-info">
+                <p>Выберите щенка для создания объявления на Авито:</p>
+            </div>
+            <div id="avito-puppies-list"></div>
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

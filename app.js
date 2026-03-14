@@ -1,6 +1,6 @@
 const tg = window.Telegram.WebApp;
 tg.ready(); tg.expand();
-const API = "https://97f05b448b891eda-107-161-168-242.serveousercontent.com";
+const API = "https://c339bb50d1d23492-107-161-168-77.serveousercontent.com";
 
 async function api(endpoint, method, body) {
     try {

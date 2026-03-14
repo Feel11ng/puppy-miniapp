@@ -2,7 +2,7 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-const API = "https://boundary-changelog-witness-bicycle.trycloudflare.com";
+const API = "https://admin.localhost.run";
 
 async function api(endpoint, method, body) {
     try {

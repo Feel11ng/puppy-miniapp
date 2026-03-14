@@ -3,151 +3,168 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>VIP Чихуахуа</title>
+<title>Vip_chihua</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="app">
+<div class="app" id="app">
 
-<!-- ГЛАВНЫЙ -->
+<!-- HOME -->
 <div id="screen-home">
-<div class="header"><div class="header-icon">🐕</div><div class="header-text"><h1>VIP Чихуахуа</h1><p class="subtitle">Управление питомником</p></div></div>
-<div class="stats-bar">
-<div class="stat-item"><span class="stat-number" id="stat-sale">—</span><span class="stat-label">В продаже</span></div>
-<div class="stat-item"><span class="stat-number" id="stat-sold">—</span><span class="stat-label">Продано</span></div>
-<div class="stat-item"><span class="stat-number" id="stat-posts">—</span><span class="stat-label">Постов</span></div>
-</div>
-<div class="nav-grid">
-<div class="nav-card" onclick="showScreen('new-post')"><div class="nav-icon">📝</div><div class="nav-title">Пост</div></div>
-<div class="nav-card" onclick="showScreen('puppies')"><div class="nav-icon">🐶</div><div class="nav-title">Щенки</div></div>
-<div class="nav-card" onclick="showScreen('ai')"><div class="nav-icon">🤖</div><div class="nav-title">AI</div></div>
-<div class="nav-card" onclick="showScreen('analytics')"><div class="nav-icon">📊</div><div class="nav-title">Стат</div></div>
-<div class="nav-card" onclick="showScreen('avito')"><div class="nav-icon">📦</div><div class="nav-title">Авито</div></div>
-<div class="nav-card" onclick="showScreen('history')"><div class="nav-icon">📋</div><div class="nav-title">История</div></div>
-</div>
-<div class="section"><div class="section-header"><h2>🐶 Щенки</h2><span class="section-link" onclick="showScreen('puppies')">Все →</span></div>
-<div class="swipe-container"><div class="swipe-track" id="swipe-track"></div></div>
-<div class="swipe-dots" id="swipe-dots"></div>
-<div id="home-puppies-list"></div></div>
+  <div class="header">
+    <div class="hicon">🐕</div>
+    <div><h1>Vip_chihua</h1><p class="sub">Управление питомником</p></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="grid">
+    <div class="gc" onclick="go('post')"><div class="gi">📝</div><div class="gt">Пост</div></div>
+    <div class="gc" onclick="go('puppies')"><div class="gi">🐶</div><div class="gt">Щенки</div></div>
+    <div class="gc" onclick="go('ai')"><div class="gi">🤖</div><div class="gt">AI</div></div>
+    <div class="gc" onclick="go('avito')"><div class="gi">📦</div><div class="gt">Авито</div></div>
+    <div class="gc" onclick="go('history')"><div class="gi">📋</div><div class="gt">История</div></div>
+    <div class="gc" onclick="go('settings')"><div class="gi">⚙️</div><div class="gt">Настройки</div></div>
+  </div>
+  <h3 style="margin-bottom:10px">🐶 Щенки в продаже</h3>
+  <div id="home-list"></div>
 </div>
 
-<!-- ЩЕНКИ -->
-<div id="screen-puppies" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>🐶 Мои щенки</h2></div>
-<div class="search-box"><span class="search-icon">🔍</span><input class="search-input" id="puppy-search" placeholder="Поиск по имени..." oninput="filterPuppies()"></div>
-<div class="filter-chips" id="filter-chips">
-<div class="filter-chip active" onclick="setFilter(this,'all')">Все</div>
-<div class="filter-chip" onclick="setFilter(this,'чихуахуа')">🐕 Чихуахуа</div>
-<div class="filter-chip" onclick="setFilter(this,'той-пудель')">🐩 Той-пудель</div>
-<div class="filter-chip" onclick="setFilter(this,'мальтипу')">🧸 Мальтипу</div>
-<div class="filter-chip" onclick="setFilter(this,'sold')">Проданные</div>
-</div>
-<div id="puppies-list"></div>
-<button class="btn btn-primary btn-full" onclick="showScreen('add-puppy')">➕ Добавить щенка</button>
-</div>
-
-<!-- ДОБАВИТЬ ЩЕНКА -->
-<div id="screen-add-puppy" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('puppies')">←</button><h2>➕ Новый щенок</h2></div>
-<div class="form">
-<label>Порода</label>
-<div class="breed-select">
-<button class="breed-btn" onclick="selectBreed(this,'чихуахуа')">🐕 Чихуахуа</button>
-<button class="breed-btn" onclick="selectBreed(this,'той-пудель')">🐩 Той-пудель</button>
-<button class="breed-btn" onclick="selectBreed(this,'мальтипу')">🧸 Мальтипу</button>
-</div>
-<label>Кличка</label><input type="text" id="puppy-name" placeholder="Имя">
-<label>Пол</label>
-<div class="gender-select">
-<button class="gender-btn" onclick="selectGender(this,'мальчик')">♂️ Мальчик</button>
-<button class="gender-btn" onclick="selectGender(this,'девочка')">♀️ Девочка</button>
-</div>
-<label>Дата рождения</label><input type="date" id="puppy-birth">
-<label>Окрас</label><input type="text" id="puppy-color" placeholder="кремовый">
-<label>Вес</label><input type="text" id="puppy-weight" placeholder="2-3 кг">
-<label>Цена ₽</label><input type="number" id="puppy-price" placeholder="50000">
-<label>Описание</label><textarea id="puppy-desc" placeholder="Характер..." rows="3"></textarea>
-<button class="btn btn-primary btn-full" onclick="savePuppy()">✅ Сохранить</button>
-</div></div>
-
-<!-- КАРТОЧКА ЩЕНКА -->
-<div id="screen-puppy-detail" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('puppies')">←</button><h2>🐶 Карточка</h2></div>
-<div id="puppy-detail-content"></div>
+<!-- PUPPIES -->
+<div id="screen-puppies" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('home')">←</button><h2>🐶 Щенки</h2></div>
+  <input class="sinput" placeholder="🔍 Поиск..." oninput="filterP(this.value)">
+  <div class="chips">
+    <span class="chip on" onclick="setF(this,'all')">Все</span>
+    <span class="chip" onclick="setF(this,'чихуахуа')">Чихуахуа</span>
+    <span class="chip" onclick="setF(this,'той-пудель')">Той-пудель</span>
+    <span class="chip" onclick="setF(this,'мальтипу')">Мальтипу</span>
+  </div>
+  <div id="plist"></div>
+  <button class="btn full" onclick="go('addpuppy')">➕ Добавить щенка</button>
 </div>
 
-<!-- СОЗДАТЬ ПОСТ -->
-<div id="screen-new-post" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📝 Создать пост</h2></div>
-<div id="post-step-1"><p class="form-hint">Выберите щенка или создайте свободный пост:</p><div id="post-puppies-list"></div>
-<button class="btn btn-secondary btn-full" onclick="startFreePost()">✍️ Свободный пост</button></div>
-<div id="post-step-2" class="hidden"><label>Стиль</label>
-<div class="style-select">
-<button class="style-btn active" onclick="selectStyle(this,'sale')">💰 Продающий</button>
-<button class="style-btn" onclick="selectStyle(this,'emotional')">💕 Эмоциональный</button>
-<button class="style-btn" onclick="selectStyle(this,'informative')">📋 Информативный</button>
+<!-- ADD PUPPY -->
+<div id="screen-addpuppy" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('puppies')">←</button><h2>➕ Новый щенок</h2></div>
+  <div class="form">
+    <label>Порода</label>
+    <div class="bsel">
+      <button class="sbtn" onclick="SB(this,'чихуахуа')">🐕 Чихуахуа</button>
+      <button class="sbtn" onclick="SB(this,'той-пудель')">🐩 Той-пудель</button>
+      <button class="sbtn" onclick="SB(this,'мальтипу')">🧸 Мальтипу</button>
+    </div>
+    <label>Кличка</label><input id="f-name">
+    <label>Пол</label>
+    <div class="bsel">
+      <button class="sbtn" onclick="SG(this,'мальчик')">♂️ Мальчик</button>
+      <button class="sbtn" onclick="SG(this,'девочка')">♀️ Девочка</button>
+    </div>
+    <label>Дата рождения</label><input type="date" id="f-birth">
+    <label>Окрас</label><input id="f-color" placeholder="кремовый">
+    <label>Вес</label><input id="f-weight" placeholder="2-3 кг">
+    <label>Цена ₽</label><input type="number" id="f-price" placeholder="50000">
+    <label>Описание</label><textarea id="f-desc" rows="2" placeholder="характер..."></textarea>
+    <button class="btn full" onclick="saveP()">✅ Сохранить</button>
+  </div>
 </div>
-<label>Доп. указания</label><textarea id="post-prompt" placeholder="сделай короче, добавь доставку..." rows="2"></textarea>
-<button class="btn btn-primary btn-full" onclick="generatePostText()">🤖 Сгенерировать</button>
-<button class="btn btn-secondary btn-full" onclick="showPostStep(1)">← Назад</button></div>
 
-<div id="post-step-3" class="hidden"><label>Текст поста</label><textarea id="post-text" rows="8"></textarea>
-<div id="post-preview-area"></div>
-<div class="post-actions">
-<button class="btn btn-secondary" onclick="regeneratePost()">🔄 Другой</button>
-<button class="btn btn-secondary" onclick="showPostStep(2)">✏️ Промт</button>
-<button class="btn btn-secondary" onclick="showPreview()">👁 Превью</button>
+<!-- PUPPY DETAIL -->
+<div id="screen-detail" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('puppies')">←</button><h2>🐶 Карточка</h2></div>
+  <div id="detail"></div>
 </div>
-<label>Куда</label>
-<div class="platform-select">
-<label class="checkbox-card"><input type="checkbox" id="pl-instagram" checked><span>📸 Instagram</span></label>
-<label class="checkbox-card"><input type="checkbox" id="pl-vk" checked><span>📘 ВКонтакте</span></label>
-<label class="checkbox-card"><input type="checkbox" id="pl-telegram" checked><span>✈️ Telegram</span></label>
-</div>
-<button class="btn btn-primary btn-full btn-publish" onclick="publishPost()">📤 Опубликовать</button>
-<button class="btn btn-secondary btn-full" onclick="showPostStep(2)">← Назад</button></div>
 
-<div id="post-result" class="hidden"><div class="result-box" id="publish-result"></div>
-<button class="btn btn-primary btn-full" onclick="showScreen('home')">🏠 Домой</button></div>
-<div id="post-loading" class="hidden"><div class="loader"></div><p class="loading-text" id="loading-text">Загрузка...</p></div>
+<!-- CREATE POST -->
+<div id="screen-post" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('home')">←</button><h2>📝 Пост</h2></div>
+  <div id="ps1">
+    <p class="hint">Выберите щенка:</p>
+    <div id="post-plist"></div>
+    <button class="btn2 full" onclick="startFree()">✍️ Свободный пост</button>
+  </div>
+  <div id="ps2" class="hidden">
+    <label>Стиль</label>
+    <div class="bsel">
+      <button class="sbtn on" onclick="SS(this,'sale')">💰 Продающий</button>
+      <button class="sbtn" onclick="SS(this,'emotional')">💕 Эмоциональный</button>
+      <button class="sbtn" onclick="SS(this,'info')">📋 Информативный</button>
+    </div>
+    <label>Доп. указания</label>
+    <textarea id="post-prompt" rows="2" placeholder="сделай короче, упомяни доставку..."></textarea>
+    <button class="btn full" onclick="genPost()">🤖 Сгенерировать</button>
+    <button class="btn2 full" onclick="showPS(1)">← Назад</button>
+  </div>
+  <div id="ps3" class="hidden">
+    <label>Текст поста</label>
+    <textarea id="post-text" rows="10"></textarea>
+    <div style="display:flex;gap:8px;margin:8px 0">
+      <button class="btn2" style="flex:1" onclick="genPost()">🔄 Другой</button>
+      <button class="btn2" style="flex:1" onclick="showPS(2)">✏️ Промт</button>
+    </div>
+    <label>Куда</label>
+    <label class="chk"><input type="checkbox" id="c-ig" checked><span>📸 Instagram</span></label>
+    <label class="chk"><input type="checkbox" id="c-vk" checked><span>📘 ВКонтакте</span></label>
+    <label class="chk"><input type="checkbox" id="c-tg" checked><span>✈️ Telegram</span></label>
+    <button class="btn full pub" onclick="pubPost()">📤 Опубликовать</button>
+    <button class="btn2 full" onclick="showPS(2)">← Назад</button>
+  </div>
+  <div id="ps-load" class="hidden"><div class="loader"></div><p class="lt" id="lt">Генерирую...</p></div>
+  <div id="ps-done" class="hidden"><div id="pub-res"></div><button class="btn full" onclick="go('home')">🏠 Домой</button></div>
 </div>
 
 <!-- AI -->
-<div id="screen-ai" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>🤖 AI-помощник</h2></div>
-<div class="option-card" onclick="aiAction('idea')"><span class="option-icon">💡</span><div><div class="option-text">Идея для поста</div><div class="option-desc">AI придумает тему</div></div></div>
-<div class="option-card" onclick="aiAction('reels')"><span class="option-icon">🎬</span><div><div class="option-text">Идея для Reels</div><div class="option-desc">Сценарий видео</div></div></div>
-<div class="option-card" onclick="aiAction('hashtags')"><span class="option-icon">#️⃣</span><div><div class="option-text">Хештеги</div><div class="option-desc">30 хештегов</div></div></div>
-<div class="option-card" onclick="aiAction('plan')"><span class="option-icon">📅</span><div><div class="option-text">План на неделю</div><div class="option-desc">Контент-план</div></div></div>
-<div class="option-card" onclick="resetGroqKey()" style="margin-top:20px;border-color:rgba(244,67,54,0.3)"><span class="option-icon">🔑</span><div><div class="option-text">Сменить API ключ</div><div class="option-desc">Если AI не работает</div></div></div>
-<div id="ai-result" class="hidden"><div class="result-text" id="ai-result-text"></div>
-<button class="btn btn-secondary btn-full" onclick="document.getElementById('ai-result').classList.add('hidden')">🔄 Ещё</button></div>
-<div id="ai-loading" class="hidden"><div class="loader"></div><p class="loading-text">AI думает...</p></div>
+<div id="screen-ai" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('home')">←</button><h2>🤖 AI-помощник</h2></div>
+  <div class="oc" onclick="aiDo('idea')"><span class="oi">💡</span><span>Идея для поста</span></div>
+  <div class="oc" onclick="aiDo('reels')"><span class="oi">🎬</span><span>Идея для Reels</span></div>
+  <div class="oc" onclick="aiDo('hashtags')"><span class="oi">#️⃣</span><span>Хештеги</span></div>
+  <div class="oc" onclick="aiDo('plan')"><span class="oi">📅</span><span>План на неделю</span></div>
+  <div class="oc" onclick="aiDo('client')"><span class="oi">💬</span><span>Ответ клиенту</span></div>
+  <div id="ai-input" class="hidden" style="margin-top:12px">
+    <textarea id="ai-prompt" rows="3" placeholder="Введите вопрос клиента..."></textarea>
+    <button class="btn full" onclick="aiClient()">🤖 Сгенерировать ответ</button>
+  </div>
+  <div id="ai-load" class="hidden"><div class="loader"></div><p class="lt">AI думает...</p></div>
+  <div id="ai-res" class="hidden">
+    <div class="resbox" id="ai-text"></div>
+    <button class="btn2 full" onclick="hideAI()">🔄 Ещё</button>
+  </div>
+  <div class="oc" onclick="resetKey()" style="margin-top:30px;opacity:0.5"><span class="oi">🔑</span><span>Сменить API ключ</span></div>
 </div>
 
-<!-- АВИТО -->
-<div id="screen-avito" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📦 Авито</h2></div>
-<p class="form-hint">Выберите щенка:</p><div id="avito-puppies-list"></div>
-<div id="avito-result" class="hidden"><label>Текст для Авито:</label><textarea id="avito-text" rows="12" readonly></textarea>
-<button class="btn btn-primary btn-full" onclick="copyAvito()">📋 Скопировать</button>
-<button class="btn btn-secondary btn-full" onclick="regenerateAvito()">🔄 Другой</button></div>
-<div id="avito-loading" class="hidden"><div class="loader"></div><p class="loading-text">Генерирую...</p></div>
+<!-- AVITO -->
+<div id="screen-avito" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('home')">←</button><h2>📦 Авито</h2></div>
+  <p class="hint">Выберите щенка:</p>
+  <div id="av-list"></div>
+  <div id="av-load" class="hidden"><div class="loader"></div><p class="lt">Генерирую...</p></div>
+  <div id="av-res" class="hidden">
+    <label>Текст для Авито (скопируйте):</label>
+    <textarea id="av-text" rows="12" readonly></textarea>
+    <button class="btn full" onclick="copyAv()">📋 Скопировать</button>
+    <button class="btn2 full" onclick="regenAv()">🔄 Другой вариант</button>
+  </div>
 </div>
 
-<!-- АНАЛИТИКА -->
-<div id="screen-analytics" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📊 Аналитика</h2></div>
-<div id="analytics-content"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+<!-- HISTORY -->
+<div id="screen-history" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('home')">←</button><h2>📋 История</h2></div>
+  <div id="hist"></div>
 </div>
 
-<!-- ИСТОРИЯ -->
-<div id="screen-history" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📋 История</h2></div>
-<div id="history-list"><p class="form-hint" style="text-align:center">Публикации будут отображаться здесь</p></div>
+<!-- SETTINGS -->
+<div id="screen-settings" class="scr hidden">
+  <div class="sh"><button class="back" onclick="go('home')">←</button><h2>⚙️ Настройки</h2></div>
+  <div class="oc" onclick="resetKey()"><span class="oi">🔑</span><span>Сменить Groq API ключ</span></div>
+  <div class="oc" onclick="clearData()"><span class="oi">🗑</span><span>Очистить все данные</span></div>
+  <div class="oc" onclick="exportData()"><span class="oi">📤</span><span>Экспорт данных</span></div>
+  <div style="text-align:center;margin-top:30px;color:var(--hint);font-size:12px">
+    <p>Vip_chihua</p>
+    <p>Версия 2.0</p>
+  </div>
 </div>
 
 </div>
 <script src="app.js"></script>
-</body></html>
+</body>
+</html>

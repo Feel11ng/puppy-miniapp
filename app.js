@@ -1,159 +1,416 @@
-// Telegram Web App
 const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-// Применяем тему Telegram
-document.documentElement.style.setProperty('--bg', tg.themeParams.bg_color || '#1a1a2e');
-document.documentElement.style.setProperty('--text', tg.themeParams.text_color || '#eee');
+const API = "https://9f50-2a12-bec4-1b77-45d8-00-1.ngrok-free.app";
+
+// === API ВЫЗОВЫ ===
+async function api(endpoint, method, body) {
+    try {
+        const opts = {
+            method: method || "GET",
+            headers: {"Content-Type": "application/json", "ngrok-skip-browser-warning": "true"}
+        };
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch(API + endpoint, opts);
+        return await res.json();
+    } catch(e) {
+        console.error("API error:", e);
+        showToast("⚠️ Ошибка связи с сервером");
+        return {success: false, error: e.message};
+    }
+}
+
+// === ДАННЫЕ ===
+let puppies = [];
+let currentPuppy = null;
+let currentStyle = "sale";
+let currentBreed = "";
+let currentGender = "";
 
 // === НАВИГАЦИЯ ===
-const screens = ['puppies', 'create-post', 'ai', 'analytics', 'autopost', 'avito'];
-
-function navigate(screenName) {
-    // Скрываем главный экран
-    document.getElementById('main-menu').style.display = 'none';
-    document.getElementById('stats-bar').style.display = 'none';
-    document.getElementById('puppies-preview').style.display = 'none';
-
-    // Скрываем все экраны
-    screens.forEach(s => {
-        const el = document.getElementById('screen-' + s);
-        if (el) el.style.display = 'none';
-    });
-
-    // Показываем нужный экран
-    const screen = document.getElementById('screen-' + screenName);
-    if (screen) {
-        screen.style.display = 'block';
-        window.scrollTo(0, 0);
-    }
-
-    // Загружаем данные для экрана
-    if (screenName === 'puppies') loadPuppies();
-    if (screenName === 'avito') loadAvitoPuppies();
-
-    // Haptic feedback
-    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-}
-
-function goHome() {
-    // Скрываем все экраны
-    screens.forEach(s => {
-        const el = document.getElementById('screen-' + s);
-        if (el) el.style.display = 'none';
-    });
-
-    // Показываем главный экран
-    document.getElementById('main-menu').style.display = '';
-    document.getElementById('stats-bar').style.display = '';
-    document.getElementById('puppies-preview').style.display = '';
+function showScreen(name) {
+    document.querySelectorAll("[id^=screen-]").forEach(el => el.classList.add("hidden"));
+    const screen = document.getElementById("screen-" + name);
+    if (screen) screen.classList.remove("hidden");
     window.scrollTo(0, 0);
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
 
-    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    if (name === "home") loadHome();
+    if (name === "puppies") loadPuppiesList();
+    if (name === "new-post") loadPostPuppies();
+    if (name === "avito") loadAvitoPuppies();
+    if (name === "analytics") loadAnalytics();
+    if (name === "ai") resetAI();
 }
 
-// === ОТПРАВКА КОМАНД БОТУ ===
-function sendCommand(command, data) {
-    const payload = { command: command, data: data || {} };
-    tg.sendData(JSON.stringify(payload));
-    
-    // Показываем уведомление
-    if (tg.showPopup) {
-        tg.showPopup({
-            title: 'Отправлено!',
-            message: 'Команда отправлена боту. Перейдите в чат.',
-            buttons: [{type: 'ok'}]
-        });
+function showToast(text) {
+    const t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = text;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+}
+
+// === ГЛАВНЫЙ ЭКРАН ===
+async function loadHome() {
+    try {
+        const data = await api("/api/puppies", "GET");
+        if (Array.isArray(data)) {
+            puppies = data;
+        }
+    } catch(e) {}
+
+    const sale = puppies.filter(p => p.status === "for_sale" || p.status === "sale");
+    const sold = puppies.filter(p => p.status === "sold");
+
+    document.getElementById("stat-sale").textContent = sale.length;
+    document.getElementById("stat-sold").textContent = sold.length;
+
+    const list = document.getElementById("home-puppies-list");
+    if (sale.length === 0) {
+        list.innerHTML = '<p style="color:var(--hint);text-align:center;padding:20px">Нет щенков. Нажмите 🐶 → ➕</p>';
+        return;
     }
-    
-    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    list.innerHTML = sale.map(p => puppyCardHTML(p)).join("");
 }
 
-function sendPuppyCommand(command, puppyId) {
-    sendCommand(command, { puppy_id: puppyId });
+function puppyCardHTML(p) {
+    const emoji = {"чихуахуа":"🐕","той-пудель":"🐩","мальтипу":"🧸"}[p.breed] || "🐶";
+    const g = p.gender === "мальчик" ? "♂️" : "♀️";
+    const price = p.price ? Number(p.price).toLocaleString("ru") + " ₽" : "";
+    return '<div class="puppy-card" onclick="showPuppyDetail(' + p.id + ')">' +
+        '<div class="puppy-avatar">' + emoji + '</div>' +
+        '<div class="puppy-info"><div class="puppy-name">' + g + " " + p.name + '</div>' +
+        '<div class="puppy-details">' + p.breed + (p.color ? " • " + p.color : "") + '</div></div>' +
+        '<div class="puppy-price">' + price + '</div></div>';
 }
 
-// === ЗАГРУЗКА ДАННЫХ ===
+// === ЩЕНКИ ===
+async function loadPuppiesList() {
+    const data = await api("/api/puppies", "GET");
+    if (Array.isArray(data)) puppies = data;
 
-// Демо-данные (будут заменены на реальные из бота)
-const demoPuppies = [
-    { id: 1, name: 'Тедди', breed: 'мальтипу', gender: 'мальчик', color: 'абрикосовый', price: 60000, emoji: '🧸' },
-    { id: 2, name: 'Бусинка', breed: 'чихуахуа', gender: 'девочка', color: 'кремовый', price: 45000, emoji: '🐕' },
-    { id: 3, name: 'Коко', breed: 'той-пудель', gender: 'девочка', color: 'шоколадный', price: 55000, emoji: '🐩' },
-];
+    const list = document.getElementById("puppies-list");
+    if (puppies.length === 0) {
+        list.innerHTML = '<p style="color:var(--hint);text-align:center;padding:20px">Пусто. Добавьте щенка!</p>';
+        return;
+    }
+    list.innerHTML = puppies.map(p => {
+        const st = p.status === "sold" ? ' <span style="color:#f44336">(продан)</span>' : "";
+        const emoji = {"чихуахуа":"🐕","той-пудель":"🐩","мальтипу":"🧸"}[p.breed] || "🐶";
+        const g = p.gender === "мальчик" ? "♂️" : "♀️";
+        const price = p.price ? Number(p.price).toLocaleString("ru") + " ₽" : "";
+        return '<div class="puppy-card" onclick="showPuppyDetail(' + p.id + ')">' +
+            '<div class="puppy-avatar">' + emoji + '</div>' +
+            '<div class="puppy-info"><div class="puppy-name">' + g + " " + p.name + st + '</div>' +
+            '<div class="puppy-details">' + p.breed + '</div></div>' +
+            '<div class="puppy-price">' + price + '</div></div>';
+    }).join("");
+}
 
-function loadPuppiesPreview() {
-    const list = document.getElementById('puppies-list');
-    
-    if (demoPuppies.length === 0) {
-        list.innerHTML = '<div class="loading">Нет щенков в продаже</div>';
+function selectBreed(btn, breed) {
+    document.querySelectorAll(".breed-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentBreed = breed;
+}
+
+function selectGender(btn, gender) {
+    document.querySelectorAll(".gender-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentGender = gender;
+}
+
+async function savePuppy() {
+    const name = document.getElementById("puppy-name").value.trim();
+    if (!name || !currentBreed || !currentGender) {
+        showToast("⚠️ Заполните породу, кличку и пол");
         return;
     }
 
-    list.innerHTML = demoPuppies.map(p => {
-        const genderEmoji = p.gender === 'мальчик' ? '♂️' : '♀️';
-        const priceStr = p.price ? p.price.toLocaleString('ru') + ' ₽' : '';
-        return `
-            <div class="puppy-card" onclick="sendPuppyCommand('view_puppy', ${p.id})">
-                <div class="puppy-avatar">${p.emoji}</div>
-                <div class="puppy-info">
-                    <div class="puppy-name">${genderEmoji} ${p.name}</div>
-                    <div class="puppy-details">${p.breed} • ${p.color}</div>
-                </div>
-                <div class="puppy-price">${priceStr}</div>
-            </div>
-        `;
-    }).join('');
+    const puppy = {
+        name: name,
+        breed: currentBreed,
+        gender: currentGender,
+        birth_date: document.getElementById("puppy-birth").value,
+        color: document.getElementById("puppy-color").value.trim(),
+        expected_weight: document.getElementById("puppy-weight").value.trim(),
+        price: document.getElementById("puppy-price").value || null,
+        description: document.getElementById("puppy-desc").value.trim()
+    };
 
-    // Обновляем статистику
-    document.getElementById('stat-sale').textContent = demoPuppies.length;
+    const res = await api("/api/puppies", "POST", puppy);
+    if (res.success) {
+        showToast("✅ Щенок добавлен!");
+        document.getElementById("puppy-name").value = "";
+        document.getElementById("puppy-birth").value = "";
+        document.getElementById("puppy-color").value = "";
+        document.getElementById("puppy-weight").value = "";
+        document.getElementById("puppy-price").value = "";
+        document.getElementById("puppy-desc").value = "";
+        currentBreed = "";
+        currentGender = "";
+        document.querySelectorAll(".breed-btn,.gender-btn").forEach(b => b.classList.remove("active"));
+        showScreen("puppies");
+    } else {
+        showToast("❌ Ошибка: " + (res.error || ""));
+    }
 }
 
-function loadPuppies() {
-    const list = document.getElementById('puppies-full-list');
-    list.innerHTML = demoPuppies.map(p => {
-        const genderEmoji = p.gender === 'мальчик' ? '♂️' : '♀️';
-        const priceStr = p.price ? p.price.toLocaleString('ru') + ' ₽' : '';
-        return `
-            <div class="puppy-card">
-                <div class="puppy-avatar">${p.emoji}</div>
-                <div class="puppy-info">
-                    <div class="puppy-name">${genderEmoji} ${p.name}</div>
-                    <div class="puppy-details">${p.breed} • ${p.color}</div>
-                </div>
-                <div class="puppy-price">${priceStr}</div>
-            </div>
-            <div style="display:flex; gap:8px; margin: -4px 0 12px 0;">
-                <button class="btn btn-primary" style="flex:1; padding:10px; font-size:13px;" 
-                    onclick="sendPuppyCommand('create_post', ${p.id})">📝 Пост</button>
-                <button class="btn btn-primary" style="flex:1; padding:10px; font-size:13px;" 
-                    onclick="sendPuppyCommand('avito', ${p.id})">📦 Авито</button>
-                <button class="btn" style="flex:1; padding:10px; font-size:13px; background:rgba(76,175,80,0.2); color:#4CAF50;" 
-                    onclick="sendPuppyCommand('mark_sold', ${p.id})">✅ Продан</button>
-            </div>
-        `;
-    }).join('');
+function showPuppyDetail(id) {
+    const p = puppies.find(x => x.id === id);
+    if (!p) return;
+    currentPuppy = p;
+
+    const g = p.gender === "мальчик" ? "♂️" : "♀️";
+    const emoji = {"чихуахуа":"🐕","той-пудель":"🐩","мальтипу":"🧸"}[p.breed] || "🐶";
+    const price = p.price ? Number(p.price).toLocaleString("ru") + " ₽" : "не указана";
+    const isSale = p.status === "for_sale" || p.status === "sale";
+
+    document.getElementById("puppy-detail-content").innerHTML =
+        '<div style="text-align:center;font-size:48px;margin:10px 0">' + emoji + '</div>' +
+        '<h2 style="text-align:center;margin-bottom:16px">' + g + " " + p.name + '</h2>' +
+        '<div class="detail-row"><span class="detail-label">Порода</span><span>' + p.breed + '</span></div>' +
+        '<div class="detail-row"><span class="detail-label">Пол</span><span>' + p.gender + '</span></div>' +
+        (p.birth_date ? '<div class="detail-row"><span class="detail-label">Д.р.</span><span>' + p.birth_date + '</span></div>' : '') +
+        (p.color ? '<div class="detail-row"><span class="detail-label">Окрас</span><span>' + p.color + '</span></div>' : '') +
+        (p.expected_weight ? '<div class="detail-row"><span class="detail-label">Вес</span><span>' + p.expected_weight + '</span></div>' : '') +
+        '<div class="detail-row"><span class="detail-label">Цена</span><span style="color:var(--btn);font-weight:700">' + price + '</span></div>' +
+        (p.description ? '<div class="detail-row"><span class="detail-label">Описание</span><span>' + p.description + '</span></div>' : '') +
+        '<div class="detail-row"><span class="detail-label">Статус</span><span>' + (isSale?"🟢 В продаже":"🔴 Продан") + '</span></div>' +
+        '<div class="detail-actions">' +
+        '<button class="btn btn-primary" onclick="createPostForPuppy(' + p.id + ')">📝 Пост</button>' +
+        '<button class="btn btn-secondary" onclick="createAvitoForPuppy(' + p.id + ')">📦 Авито</button>' +
+        (isSale ? '<button class="btn btn-success" onclick="markSold(' + p.id + ')">✅ Продан</button>' : '') +
+        '<button class="btn btn-danger" onclick="deletePuppy(' + p.id + ')">🗑</button>' +
+        '</div>';
+
+    showScreen("puppy-detail");
 }
 
+async function markSold(id) {
+    await api("/api/puppies/" + id + "/sold", "POST");
+    showToast("✅ Продан!");
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    showScreen("puppies");
+}
+
+async function deletePuppy(id) {
+    if (!confirm("Удалить щенка?")) return;
+    await api("/api/puppies/" + id, "DELETE");
+    showToast("🗑 Удалён");
+    showScreen("puppies");
+}
+
+// === СОЗДАНИЕ ПОСТА ===
+function loadPostPuppies() {
+    showPostStep(1);
+    const sale = puppies.filter(p => p.status === "for_sale" || p.status === "sale");
+    document.getElementById("post-puppies-list").innerHTML = sale.map(p => {
+        const emoji = {"чихуахуа":"🐕","той-пудель":"🐩","мальтипу":"🧸"}[p.breed]||"🐶";
+        return '<div class="option-card" onclick="selectPostPuppy(' + p.id + ')">' +
+            '<span class="option-icon">' + emoji + '</span>' +
+            '<div><div class="option-text">' + p.name + '</div>' +
+            '<div class="option-desc">' + p.breed + '</div></div></div>';
+    }).join("") || '<p style="color:var(--hint);padding:20px;text-align:center">Нет щенков</p>';
+}
+
+function selectPostPuppy(id) { currentPuppy = puppies.find(x => x.id === id); showPostStep(2); }
+function startFreePost() { currentPuppy = null; showPostStep(2); }
+function createPostForPuppy(id) { currentPuppy = puppies.find(x => x.id === id); showScreen("new-post"); showPostStep(2); }
+
+function showPostStep(step) {
+    [1,2,3].forEach(s => document.getElementById("post-step-"+s).classList.add("hidden"));
+    document.getElementById("post-result").classList.add("hidden");
+    document.getElementById("post-loading").classList.add("hidden");
+    document.getElementById("post-step-"+step).classList.remove("hidden");
+}
+
+function selectStyle(btn, style) {
+    document.querySelectorAll(".style-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentStyle = style;
+}
+
+async function generatePostText() {
+    document.getElementById("post-step-2").classList.add("hidden");
+    document.getElementById("post-loading").classList.remove("hidden");
+    document.getElementById("loading-text").textContent = "🤖 AI генерирует текст...";
+
+    const prompt = document.getElementById("post-prompt").value;
+    let res;
+
+    if (currentPuppy) {
+        res = await api("/api/ai/puppy_description", "POST", {
+            puppy_id: currentPuppy.id,
+            style: currentStyle,
+            prompt: prompt
+        });
+    } else {
+        res = await api("/api/ai/content_idea", "POST", {type: "useful"});
+    }
+
+    document.getElementById("post-loading").classList.add("hidden");
+
+    if (res.success && res.text) {
+        document.getElementById("post-text").value = res.text;
+        showPostStep(3);
+    } else {
+        showToast("❌ Ошибка AI: " + (res.error || ""));
+        showPostStep(2);
+    }
+}
+
+async function regeneratePost() { await generatePostText(); }
+
+async function publishPost() {
+    const text = document.getElementById("post-text").value;
+    const platforms = [];
+    if (document.getElementById("pl-instagram").checked) platforms.push("instagram");
+    if (document.getElementById("pl-vk").checked) platforms.push("vk");
+    if (document.getElementById("pl-telegram").checked) platforms.push("telegram");
+
+    if (platforms.length === 0) { showToast("⚠️ Выберите соцсеть"); return; }
+    if (!text.trim()) { showToast("⚠️ Текст пустой"); return; }
+
+    document.getElementById("post-step-3").classList.add("hidden");
+    document.getElementById("post-loading").classList.remove("hidden");
+    document.getElementById("loading-text").textContent = "📤 Публикую в " + platforms.length + " соцсетей...";
+
+    const res = await api("/api/publish", "POST", {
+        text: text,
+        platforms: platforms,
+        puppy_id: currentPuppy ? currentPuppy.id : null
+    });
+
+    document.getElementById("post-loading").classList.add("hidden");
+
+    if (res.success && res.results) {
+        const names = {instagram:"📸 Instagram", vk:"📘 ВКонтакте", telegram:"✈️ Telegram"};
+        let html = '<h3 style="margin-bottom:12px">📊 Результат публикации</h3>';
+        for (const [platform, result] of Object.entries(res.results)) {
+            const ok = result.success;
+            html += '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">' +
+                '<span>' + (names[platform]||platform) + '</span>' +
+                '<span style="color:' + (ok?"#4caf50":"#f44336") + '">' + (ok?"✅ Опубликовано":"❌ Ошибка") + '</span></div>';
+        }
+        document.getElementById("publish-result").innerHTML = html;
+        document.getElementById("post-result").classList.remove("hidden");
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    } else {
+        showToast("❌ Ошибка: " + (res.error || ""));
+        showPostStep(3);
+    }
+}
+
+// === АВИТО ===
 function loadAvitoPuppies() {
-    const list = document.getElementById('avito-puppies-list');
-    list.innerHTML = demoPuppies.map(p => {
-        const genderEmoji = p.gender === 'мальчик' ? '♂️' : '♀️';
-        return `
-            <div class="option-card" onclick="sendPuppyCommand('avito', ${p.id})">
-                <span class="option-icon">${p.emoji}</span>
-                <span class="option-text">${genderEmoji} ${p.name} (${p.breed})</span>
-            </div>
-        `;
-    }).join('');
+    document.getElementById("avito-result").classList.add("hidden");
+    document.getElementById("avito-loading").classList.add("hidden");
+    const sale = puppies.filter(p => p.status === "for_sale" || p.status === "sale");
+    document.getElementById("avito-puppies-list").innerHTML = sale.map(p => {
+        const emoji = {"чихуахуа":"🐕","той-пудель":"🐩","мальтипу":"🧸"}[p.breed]||"🐶";
+        return '<div class="option-card" onclick="generateAvito(' + p.id + ')">' +
+            '<span class="option-icon">' + emoji + '</span>' +
+            '<div><div class="option-text">' + p.name + '</div>' +
+            '<div class="option-desc">' + p.breed + '</div></div></div>';
+    }).join("") || '<p style="color:var(--hint);text-align:center;padding:20px">Нет щенков</p>';
 }
 
-// === ИНИЦИАЛИЗАЦИЯ ===
-document.addEventListener('DOMContentLoaded', function() {
-    loadPuppiesPreview();
-    
-    // Демо-данные статистики
-    document.getElementById('stat-sold').textContent = '5';
-    document.getElementById('stat-queue').textContent = '3';
-});
+function createAvitoForPuppy(id) { showScreen("avito"); setTimeout(() => generateAvito(id), 300); }
+
+async function generateAvito(id) {
+    currentPuppy = puppies.find(x => x.id === id);
+    document.getElementById("avito-loading").classList.remove("hidden");
+    document.getElementById("avito-result").classList.add("hidden");
+
+    const res = await api("/api/ai/avito", "POST", {puppy_id: id});
+
+    document.getElementById("avito-loading").classList.add("hidden");
+    if (res.success && res.text) {
+        document.getElementById("avito-text").value = res.text;
+        document.getElementById("avito-result").classList.remove("hidden");
+    } else {
+        showToast("❌ Ошибка: " + (res.error || ""));
+    }
+}
+
+async function regenerateAvito() { if (currentPuppy) await generateAvito(currentPuppy.id); }
+
+function copyAvito() {
+    const text = document.getElementById("avito-text").value;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast("📋 Скопировано!");
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    });
+}
+
+// === AI ===
+function resetAI() {
+    document.getElementById("ai-result").classList.add("hidden");
+    document.getElementById("ai-loading").classList.add("hidden");
+}
+
+async function aiAction(type) {
+    document.getElementById("ai-loading").classList.remove("hidden");
+    document.getElementById("ai-result").classList.add("hidden");
+
+    const endpoints = {
+        idea: ["/api/ai/content_idea", {type: "useful"}],
+        reels: ["/api/ai/reels_idea", {}],
+        hashtags: ["/api/ai/hashtags", {breed: "чихуахуа"}],
+        plan: ["/api/ai/weekly_plan", {}]
+    };
+
+    const [endpoint, body] = endpoints[type] || ["/api/ai/content_idea", {}];
+    const res = await api(endpoint, "POST", body);
+
+    document.getElementById("ai-loading").classList.add("hidden");
+    if (res.success && res.text) {
+        document.getElementById("ai-result-text").textContent = res.text;
+        document.getElementById("ai-result").classList.remove("hidden");
+    } else {
+        showToast("❌ Ошибка: " + (res.error || ""));
+    }
+}
+
+// === АНАЛИТИКА ===
+async function loadAnalytics() {
+    document.getElementById("analytics-content").innerHTML = '<div class="loader"></div><p class="loading-text">Собираю данные...</p>';
+
+    const res = await api("/api/analytics", "GET");
+
+    let igCount = "—", vkCount = "—", tgCount = "—", total = 0, igPosts = "";
+
+    if (res.instagram && res.instagram.success) {
+        igCount = res.instagram.count.toLocaleString("ru");
+        total += res.instagram.count;
+        igPosts = " • " + (res.instagram.posts || 0) + " постов";
+    }
+    if (res.vk && res.vk.success) {
+        vkCount = res.vk.count.toLocaleString("ru");
+        total += res.vk.count;
+    }
+    if (res.telegram && res.telegram.success) {
+        tgCount = res.telegram.count.toLocaleString("ru");
+        total += res.telegram.count;
+    }
+
+    const sale = res.puppies ? res.puppies.for_sale : "—";
+    const sold = res.puppies ? res.puppies.sold : "—";
+
+    document.getElementById("analytics-content").innerHTML =
+        '<div class="analytics-card ig"><span style="font-size:24px">📸</span><span class="analytics-platform">Instagram' + igPosts + '</span><span class="analytics-count">' + igCount + '</span></div>' +
+        '<div class="analytics-card vk"><span style="font-size:24px">📘</span><span class="analytics-platform">ВКонтакте</span><span class="analytics-count">' + vkCount + '</span></div>' +
+        '<div class="analytics-card tg"><span style="font-size:24px">✈️</span><span class="analytics-platform">Telegram</span><span class="analytics-count">' + tgCount + '</span></div>' +
+        '<div class="total-box"><span>📊 Всего</span><span class="total-count">' + total.toLocaleString("ru") + '</span></div>' +
+        '<div style="display:flex;gap:10px;margin-top:12px">' +
+        '<div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px;text-align:center">' +
+        '<div style="font-size:20px;font-weight:700;color:#4caf50">' + sale + '</div><div style="font-size:11px;color:var(--hint)">В продаже</div></div>' +
+        '<div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px;text-align:center">' +
+        '<div style="font-size:20px;font-weight:700;color:#ff9800">' + sold + '</div><div style="font-size:11px;color:var(--hint)">Продано</div></div></div>' +
+        '<button class="btn btn-secondary btn-full" onclick="loadAnalytics()">🔄 Обновить</button>';
+}
+
+// === INIT ===
+showScreen("home");

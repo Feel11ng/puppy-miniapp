@@ -2,7 +2,7 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-const API = "https://automatic-palace-billy-matching.trycloudflare.com";
+const API = "https://boundary-changelog-witness-bicycle.trycloudflare.com";
 
 async function api(endpoint, method, body) {
     try {

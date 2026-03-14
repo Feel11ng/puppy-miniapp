@@ -2,7 +2,7 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-const API = "https://4d8a-2a12-bec4-1b71-2def-00-1.ngrok-free.app";
+const API = "https://criselda-proterogynous-natisha.ngrok-free.dev";
 
 async function api(endpoint, method, body) {
     try {

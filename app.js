@@ -17,11 +17,17 @@ let puppies=loadPuppies(), currentPuppy=null, currentStyle="sale", currentBreed=
 
 // === AI ЧЕРЕЗ GROQ НАПРЯМУЮ ===
 async function aiGenerate(prompt) {
+    const key = localStorage.getItem("groq_key");
+    if(!key || key.length < 10) {
+        showToast("Введите Groq API ключ","error");
+        checkGroqKey();
+        return null;
+    }
     // Пробуем Groq напрямую
     try {
         const res = await fetch(GROQ_URL, {
             method: "POST",
-            headers: {"Content-Type":"application/json","Authorization":"Bearer "+GROQ_KEY},
+            headers: {"Content-Type":"application/json","Authorization":"Bearer "+key},
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
                 messages: [
@@ -43,7 +49,7 @@ function generateFromTemplates(prompt) {
     const p = prompt.toLowerCase();
     const puppy = currentPuppy;
     
-    if(puppy && (p.includes("пост") || p.includes("описание"))) {
+    if(puppy && (p.includes("пост") || p.includes("описание") || p.includes("щенк") || p.includes("instagram") || p.includes("продаж"))) {
         const g = puppy.gender === "мальчик" ? "мальчик" : "девочка";
         const templates = [
             "🐾 Знакомьтесь — " + puppy.name + "!\n\nОчаровательный " + g + " породы " + puppy.breed + (puppy.color ? ", окрас " + puppy.color : "") + " ищет любящую семью! 🏠\n\n" + (puppy.price ? "💰 " + Number(puppy.price).toLocaleString("ru") + " ₽\n" : "") + "✅ Ветпаспорт\n✅ Привит по возрасту\n✅ Приучен к пелёнке\n\nПишите в директ! 📩\n\n#" + puppy.breed.replace("-","") + " #щенки #питомник #" + CITY.toLowerCase(),
@@ -245,25 +251,55 @@ function selectStyle(b,s){document.querySelectorAll(".style-btn").forEach(x=>x.c
 async function generatePostText(){
     document.getElementById("post-step-2").classList.add("hidden");
     document.getElementById("post-loading").classList.remove("hidden");
-    document.getElementById("loading-text").textContent="🤖 AI генерирует...";
+    document.getElementById("loading-text").textContent="🤖 AI генерирует текст...";
     const prompt_extra=document.getElementById("post-prompt").value;
+    
+    const styles={"sale":"Продающий стиль: подчеркни преимущества, вызови желание купить. Укажи цену, документы, контакт.",
+        "emotional":"Эмоциональный стиль: милый, трогательный текст. Вызови умиление и желание взять щенка.",
+        "informative":"Информативный стиль: чёткие факты и характеристики без лишних эмоций."};
+    const styleDesc=styles[currentStyle]||styles.sale;
+    
     let prompt;
     if(currentPuppy){
         const p=currentPuppy;
-        prompt="Напиши пост для соцсетей о щенке. Кличка: "+p.name+", порода: "+p.breed+", пол: "+p.gender+
-            (p.color?", окрас: "+p.color:"")+(p.price?", цена: "+p.price+" руб":"")+
-            (p.description?", описание: "+p.description:"")+
-            ". Документы: ветпаспорт, прививки. Стиль: "+currentStyle+
-            ". Добавь хештеги. Не пиши Заголовок: или Текст:, просто готовый пост."+
-            (prompt_extra?" Доп.указания: "+prompt_extra:"");
+        prompt="Напиши пост для Instagram/VK/Telegram о продаже щенка.\n\n"+
+            "Данные щенка:\n"+
+            "- Кличка: "+p.name+"\n"+
+            "- Порода: "+p.breed+"\n"+
+            "- Пол: "+p.gender+"\n"+
+            (p.birth_date?"- Дата рождения: "+p.birth_date+"\n":"")+
+            (p.color?"- Окрас: "+p.color+"\n":"")+
+            (p.expected_weight?"- Вес: "+p.expected_weight+"\n":"")+
+            (p.price?"- Цена: "+p.price+" руб\n":"")+
+            "- Документы: ветпаспорт, привит по возрасту\n"+
+            (p.description?"- Описание: "+p.description+"\n":"")+
+            "\n"+styleDesc+"\n\n"+
+            "ВАЖНО: Напиши ПОЛНЫЙ текст поста (минимум 100 слов) с эмодзи. "+
+            "В конце добавь 15-20 хештегов. "+
+            "НЕ пиши слова Заголовок:, Текст:, Хештеги: — просто готовый пост."+
+            (prompt_extra?"\n\nДополнительно: "+prompt_extra:"");
     } else {
-        prompt="Напиши полезный пост для соцсетей питомника собак (чихуахуа, той-пудель, мальтипу). С хештегами. Не пиши Заголовок: или Текст:."+
-            (prompt_extra?" Тема: "+prompt_extra:"");
+        prompt="Напиши полезный пост для соцсетей питомника мелких пород собак.\n\n"+
+            "Питомник: "+KENNEL+", город: "+CITY+"\n"+
+            "Породы: чихуахуа, той-пудель, мальтипу\n\n"+
+            "Напиши ПОЛНЫЙ текст (минимум 100 слов) с эмодзи. "+
+            "Тема: советы по уходу, интересные факты о породах, или полезная информация для владельцев. "+
+            "В конце добавь 15-20 хештегов. "+
+            "НЕ пиши Заголовок:, Текст: — просто готовый пост."+
+            (prompt_extra?"\n\nТема: "+prompt_extra:"");
     }
+    
+    console.log("PROMPT:", prompt);
     const text=await aiGenerate(prompt);
+    console.log("AI RESULT:", text);
     document.getElementById("post-loading").classList.add("hidden");
-    if(text){document.getElementById("post-text").value=text;showPostStep(3);}
-    else showPostStep(2);
+    if(text && text.length > 20){
+        document.getElementById("post-text").value=text;
+        showPostStep(3);
+    } else {
+        showToast("AI вернул пустой ответ, попробуйте ещё","error");
+        showPostStep(2);
+    }
 }
 async function regeneratePost(){await generatePostText();}
 
@@ -285,8 +321,9 @@ function publishPost(){
     showToast("📤 Отправлено боту! Проверьте чат.","success");
     document.getElementById("post-step-3").classList.add("hidden");
     document.getElementById("publish-result").innerHTML=
-        '<h3 style="margin-bottom:14px">📤 Отправлено!</h3>'+
-        '<p style="color:var(--hint)">Команда отправлена боту.<br>Бот опубликует пост в: '+pls.join(", ")+'<br><br>Проверьте чат с ботом для подтверждения.</p>';
+        '<h3 style="margin-bottom:14px">📤 Отправлено боту!</h3>'+
+        '<div style="margin:10px 0">'+pls.map(function(p){var n={"instagram":"📸 Instagram","vk":"📘 ВКонтакте","telegram":"✈️ Telegram"};return '<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span>'+(n[p]||p)+'</span><span style="color:#4caf50">📤 Отправлено</span></div>';}).join("")+'</div>'+
+        '<p style="color:var(--hint);font-size:13px">Откройте чат с ботом — он подтвердит публикацию</p>';
     document.getElementById("post-result").classList.remove("hidden");
 }
 
@@ -302,9 +339,19 @@ async function generateAvito(id){
     currentPuppy=puppies.find(x=>x.id==id);if(!currentPuppy)return;
     document.getElementById("avito-loading").classList.remove("hidden");document.getElementById("avito-result").classList.add("hidden");
     const p=currentPuppy;
-    const prompt="Напиши объявление для Авито. Щенок: "+p.name+", "+p.breed+", "+p.gender+
-        (p.color?", "+p.color:"")+(p.price?", "+p.price+" руб":"")+(p.description?". "+p.description:"")+
-        ". Ветпаспорт, привит. БЕЗ эмодзи, деловой стиль, с заголовком.";
+    const prompt="Напиши подробное объявление для сайта Авито о продаже щенка.\n\n"+
+        "Данные:\n"+
+        "- Кличка: "+p.name+"\n- Порода: "+p.breed+"\n- Пол: "+p.gender+"\n"+
+        (p.birth_date?"- Дата рождения: "+p.birth_date+"\n":"")+
+        (p.color?"- Окрас: "+p.color+"\n":"")+
+        (p.expected_weight?"- Вес: "+p.expected_weight+"\n":"")+
+        (p.price?"- Цена: "+p.price+" руб\n":"")+
+        (p.description?"- "+p.description+"\n":"")+
+        "- Документы: ветпаспорт, привит\n"+
+        "- Город: "+CITY+"\n\n"+
+        "Правила: НЕ используй эмодзи. Деловой стиль. Подробное описание породы. "+
+        "Напиши ЗАГОЛОВОК (одна строка) потом ОПИСАНИЕ (минимум 150 слов). "+
+        "Укажи преимущества породы. Ключевые слова для поиска.";
     const text=await aiGenerate(prompt);
     document.getElementById("avito-loading").classList.add("hidden");
     if(text){document.getElementById("avito-text").value=text;document.getElementById("avito-result").classList.remove("hidden");}
@@ -338,14 +385,23 @@ function loadHistoryScreen(){
 
 
 function checkGroqKey() {
-    if (!GROQ_KEY && !localStorage.getItem("groq_key")) {
-        const key = prompt("Введите Groq API ключ (получить на console.groq.com/keys):");
+    if (!localStorage.getItem("groq_key")) {
+        const key = prompt("Введите Groq API ключ\n\nПолучить бесплатно: console.groq.com/keys\nКлюч начинается с gsk_");
         if (key && key.startsWith("gsk_")) {
             localStorage.setItem("groq_key", key);
+            showToast("✅ Ключ сохранён!","success");
             location.reload();
+        } else if(key) {
+            showToast("Ключ должен начинаться с gsk_","error");
         }
     }
 }
-checkGroqKey();
+setTimeout(checkGroqKey, 1000);
 
 showScreen("home");
+
+function resetGroqKey(){
+    localStorage.removeItem("groq_key");
+    showToast("Ключ удалён","success");
+    setTimeout(checkGroqKey, 500);
+}

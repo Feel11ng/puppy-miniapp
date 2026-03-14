@@ -10,26 +10,44 @@
 <body>
 <div class="app">
 
+<!-- ГЛАВНЫЙ -->
 <div id="screen-home">
 <div class="header"><div class="header-icon">🐕</div><div class="header-text"><h1>VIP Чихуахуа</h1><p class="subtitle">Управление питомником</p></div></div>
-<div class="stats-bar"><div class="stat-item"><span class="stat-number" id="stat-sale">—</span><span class="stat-label">В продаже</span></div><div class="stat-item"><span class="stat-number" id="stat-sold">—</span><span class="stat-label">Продано</span></div></div>
+<div class="stats-bar">
+<div class="stat-item"><span class="stat-number" id="stat-sale">—</span><span class="stat-label">В продаже</span></div>
+<div class="stat-item"><span class="stat-number" id="stat-sold">—</span><span class="stat-label">Продано</span></div>
+<div class="stat-item"><span class="stat-number" id="stat-posts">—</span><span class="stat-label">Постов</span></div>
+</div>
 <div class="nav-grid">
 <div class="nav-card" onclick="showScreen('new-post')"><div class="nav-icon">📝</div><div class="nav-title">Пост</div></div>
 <div class="nav-card" onclick="showScreen('puppies')"><div class="nav-icon">🐶</div><div class="nav-title">Щенки</div></div>
 <div class="nav-card" onclick="showScreen('ai')"><div class="nav-icon">🤖</div><div class="nav-title">AI</div></div>
 <div class="nav-card" onclick="showScreen('analytics')"><div class="nav-icon">📊</div><div class="nav-title">Стат</div></div>
 <div class="nav-card" onclick="showScreen('avito')"><div class="nav-icon">📦</div><div class="nav-title">Авито</div></div>
-<div class="nav-card" onclick="showScreen('autopost')"><div class="nav-icon">📅</div><div class="nav-title">Авто</div></div>
+<div class="nav-card" onclick="showScreen('history')"><div class="nav-icon">📋</div><div class="nav-title">История</div></div>
 </div>
-<div class="section"><div class="section-header"><h2>🐶 Щенки в продаже</h2></div><div id="home-puppies-list"></div></div>
+<div class="section"><div class="section-header"><h2>🐶 Щенки</h2><span class="section-link" onclick="showScreen('puppies')">Все →</span></div>
+<div class="swipe-container"><div class="swipe-track" id="swipe-track"></div></div>
+<div class="swipe-dots" id="swipe-dots"></div>
+<div id="home-puppies-list"></div></div>
 </div>
 
+<!-- ЩЕНКИ -->
 <div id="screen-puppies" class="screen hidden">
 <div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>🐶 Мои щенки</h2></div>
+<div class="search-box"><span class="search-icon">🔍</span><input class="search-input" id="puppy-search" placeholder="Поиск по имени..." oninput="filterPuppies()"></div>
+<div class="filter-chips" id="filter-chips">
+<div class="filter-chip active" onclick="setFilter(this,'all')">Все</div>
+<div class="filter-chip" onclick="setFilter(this,'чихуахуа')">🐕 Чихуахуа</div>
+<div class="filter-chip" onclick="setFilter(this,'той-пудель')">🐩 Той-пудель</div>
+<div class="filter-chip" onclick="setFilter(this,'мальтипу')">🧸 Мальтипу</div>
+<div class="filter-chip" onclick="setFilter(this,'sold')">Проданные</div>
+</div>
 <div id="puppies-list"></div>
 <button class="btn btn-primary btn-full" onclick="showScreen('add-puppy')">➕ Добавить щенка</button>
 </div>
 
+<!-- ДОБАВИТЬ ЩЕНКА -->
 <div id="screen-add-puppy" class="screen hidden">
 <div class="screen-header"><button class="back-btn" onclick="showScreen('puppies')">←</button><h2>➕ Новый щенок</h2></div>
 <div class="form">
@@ -53,31 +71,33 @@
 <button class="btn btn-primary btn-full" onclick="savePuppy()">✅ Сохранить</button>
 </div></div>
 
+<!-- КАРТОЧКА ЩЕНКА -->
 <div id="screen-puppy-detail" class="screen hidden">
 <div class="screen-header"><button class="back-btn" onclick="showScreen('puppies')">←</button><h2>🐶 Карточка</h2></div>
 <div id="puppy-detail-content"></div>
 </div>
 
+<!-- СОЗДАТЬ ПОСТ -->
 <div id="screen-new-post" class="screen hidden">
 <div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📝 Создать пост</h2></div>
-<div id="post-step-1"><p class="form-hint">Выберите щенка:</p><div id="post-puppies-list"></div>
+<div id="post-step-1"><p class="form-hint">Выберите щенка или создайте свободный пост:</p><div id="post-puppies-list"></div>
 <button class="btn btn-secondary btn-full" onclick="startFreePost()">✍️ Свободный пост</button></div>
-<div id="post-step-2" class="hidden">
-<label>Стиль</label>
+<div id="post-step-2" class="hidden"><label>Стиль</label>
 <div class="style-select">
 <button class="style-btn active" onclick="selectStyle(this,'sale')">💰 Продающий</button>
 <button class="style-btn" onclick="selectStyle(this,'emotional')">💕 Эмоциональный</button>
 <button class="style-btn" onclick="selectStyle(this,'informative')">📋 Информативный</button>
 </div>
-<label>Доп. указания</label><textarea id="post-prompt" placeholder="сделай короче..." rows="2"></textarea>
+<label>Доп. указания</label><textarea id="post-prompt" placeholder="сделай короче, добавь доставку..." rows="2"></textarea>
 <button class="btn btn-primary btn-full" onclick="generatePostText()">🤖 Сгенерировать</button>
-<button class="btn btn-secondary btn-full" onclick="showPostStep(1)">← Назад</button>
-</div>
-<div id="post-step-3" class="hidden">
-<label>Текст</label><textarea id="post-text" rows="10"></textarea>
+<button class="btn btn-secondary btn-full" onclick="showPostStep(1)">← Назад</button></div>
+
+<div id="post-step-3" class="hidden"><label>Текст поста</label><textarea id="post-text" rows="8"></textarea>
+<div id="post-preview-area"></div>
 <div class="post-actions">
 <button class="btn btn-secondary" onclick="regeneratePost()">🔄 Другой</button>
 <button class="btn btn-secondary" onclick="showPostStep(2)">✏️ Промт</button>
+<button class="btn btn-secondary" onclick="showPreview()">👁 Превью</button>
 </div>
 <label>Куда</label>
 <div class="platform-select">
@@ -86,42 +106,45 @@
 <label class="checkbox-card"><input type="checkbox" id="pl-telegram" checked><span>✈️ Telegram</span></label>
 </div>
 <button class="btn btn-primary btn-full btn-publish" onclick="publishPost()">📤 Опубликовать</button>
-<button class="btn btn-secondary btn-full" onclick="showPostStep(2)">← Назад</button>
-</div>
+<button class="btn btn-secondary btn-full" onclick="showPostStep(2)">← Назад</button></div>
+
 <div id="post-result" class="hidden"><div class="result-box" id="publish-result"></div>
 <button class="btn btn-primary btn-full" onclick="showScreen('home')">🏠 Домой</button></div>
 <div id="post-loading" class="hidden"><div class="loader"></div><p class="loading-text" id="loading-text">Загрузка...</p></div>
 </div>
 
+<!-- AI -->
 <div id="screen-ai" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>🤖 AI</h2></div>
-<div class="option-card" onclick="aiAction('idea')"><span class="option-icon">💡</span><div><div class="option-text">Идея для поста</div></div></div>
-<div class="option-card" onclick="aiAction('reels')"><span class="option-icon">🎬</span><div><div class="option-text">Идея для Reels</div></div></div>
-<div class="option-card" onclick="aiAction('hashtags')"><span class="option-icon">#️⃣</span><div><div class="option-text">Хештеги</div></div></div>
-<div class="option-card" onclick="aiAction('plan')"><span class="option-icon">📅</span><div><div class="option-text">План на неделю</div></div></div>
+<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>🤖 AI-помощник</h2></div>
+<div class="option-card" onclick="aiAction('idea')"><span class="option-icon">💡</span><div><div class="option-text">Идея для поста</div><div class="option-desc">AI придумает тему</div></div></div>
+<div class="option-card" onclick="aiAction('reels')"><span class="option-icon">🎬</span><div><div class="option-text">Идея для Reels</div><div class="option-desc">Сценарий видео</div></div></div>
+<div class="option-card" onclick="aiAction('hashtags')"><span class="option-icon">#️⃣</span><div><div class="option-text">Хештеги</div><div class="option-desc">30 хештегов</div></div></div>
+<div class="option-card" onclick="aiAction('plan')"><span class="option-icon">📅</span><div><div class="option-text">План на неделю</div><div class="option-desc">Контент-план</div></div></div>
 <div id="ai-result" class="hidden"><div class="result-text" id="ai-result-text"></div>
 <button class="btn btn-secondary btn-full" onclick="document.getElementById('ai-result').classList.add('hidden')">🔄 Ещё</button></div>
 <div id="ai-loading" class="hidden"><div class="loader"></div><p class="loading-text">AI думает...</p></div>
 </div>
 
+<!-- АВИТО -->
 <div id="screen-avito" class="screen hidden">
 <div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📦 Авито</h2></div>
 <p class="form-hint">Выберите щенка:</p><div id="avito-puppies-list"></div>
-<div id="avito-result" class="hidden"><label>Текст (скопируйте):</label><textarea id="avito-text" rows="12" readonly></textarea>
+<div id="avito-result" class="hidden"><label>Текст для Авито:</label><textarea id="avito-text" rows="12" readonly></textarea>
 <button class="btn btn-primary btn-full" onclick="copyAvito()">📋 Скопировать</button>
 <button class="btn btn-secondary btn-full" onclick="regenerateAvito()">🔄 Другой</button></div>
 <div id="avito-loading" class="hidden"><div class="loader"></div><p class="loading-text">Генерирую...</p></div>
 </div>
 
+<!-- АНАЛИТИКА -->
 <div id="screen-analytics" class="screen hidden">
 <div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📊 Аналитика</h2></div>
-<div id="analytics-content"><div class="loader"></div><p class="loading-text">Собираю...</p></div>
+<div id="analytics-content"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
 </div>
 
-<div id="screen-autopost" class="screen hidden">
-<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📅 Автопостинг</h2></div>
-<p class="form-hint">Управление автопостингом доступно в чате бота. Нажмите кнопку "📅 Автопостинг" в меню бота.</p>
-<button class="btn btn-primary btn-full" onclick="showScreen('home')">🏠 Домой</button>
+<!-- ИСТОРИЯ -->
+<div id="screen-history" class="screen hidden">
+<div class="screen-header"><button class="back-btn" onclick="showScreen('home')">←</button><h2>📋 История</h2></div>
+<div id="history-list"><p class="form-hint" style="text-align:center">Публикации будут отображаться здесь</p></div>
 </div>
 
 </div>

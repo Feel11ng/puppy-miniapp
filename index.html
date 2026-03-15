@@ -3,25 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Питомник щенков</title>
+    <title>PuppyHub</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+    <div id="toast-container"></div>
     <div id="app">
-        <div class="top-bar">
-            <h1 id="page-title">&#x1F43E; Мои щенки</h1>
-            <button class="btn-icon" id="btn-settings" onclick="showSettings()">&#x2699;&#xFE0F;</button>
+        <div class="header">
+            <div class="header-left">
+                <span class="logo">&#x1F43E;</span>
+                <div>
+                    <h1 class="header-title">PuppyHub</h1>
+                    <p class="header-sub" id="header-sub">&#x1F436; Управление питомником</p>
+                </div>
+            </div>
+            <button class="btn-icon" onclick="showSettings()">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            </button>
         </div>
-        <div class="nav-tabs">
-            <button class="tab active" data-tab="puppies" onclick="switchTab('puppies')">&#x1F436; Щенки</button>
-            <button class="tab" data-tab="posts" onclick="switchTab('posts')">&#x1F4DD; Посты</button>
+        <div class="tabs">
+            <button class="tab active" data-tab="puppies" onclick="switchTab('puppies')">&#x1F436; &#1065;&#1077;&#1085;&#1082;&#1080;</button>
+            <button class="tab" data-tab="posts" onclick="switchTab('posts')">&#x1F4DD; &#1055;&#1086;&#1089;&#1090;&#1099;</button>
             <button class="tab" data-tab="ai" onclick="switchTab('ai')">&#x1F916; AI</button>
         </div>
         <div id="content"></div>
     </div>
+    <button id="fab" class="fab hidden" onclick="showAddPuppyForm()">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
     <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
         <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-handle"></div>
             <div class="modal-header">
                 <h2 id="modal-title"></h2>
                 <button class="btn-close" onclick="hideModal()">&times;</button>

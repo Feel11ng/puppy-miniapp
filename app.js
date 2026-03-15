@@ -1,865 +1,514 @@
-/* =============================================
-   PUPPY MINIAPP - app.js
-   Telegram Mini App для управления питомником
-   ============================================= */
+/* === PUPPYHUB MINI APP === */
 
-// === ИНИЦИАЛИЗАЦИЯ TELEGRAM ===
-let tg = null;
+// Telegram
+var tg = null;
 try {
-    tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-    if (tg) {
+    if (window.Telegram && window.Telegram.WebApp) {
+        tg = window.Telegram.WebApp;
         tg.expand();
         tg.ready();
+        tg.setHeaderColor('#0a0a1a');
+        tg.setBackgroundColor('#0a0a1a');
     }
-} catch (e) {
-    console.log("Telegram WebApp не доступен:", e);
-}
+} catch(e) { console.log("TG init:", e); }
 
-// === СОСТОЯНИЕ ПРИЛОЖЕНИЯ ===
-let currentTab = "puppies";
-let puppies = [];
-let groqApiKey = "";
+// State
+var currentTab = "puppies";
+var puppies = [];
+var groqKey = "";
+var pendingPost = "";
 
-// === ЗАГРУЗКА ДАННЫХ ===
+// === DATA ===
 function loadData() {
     try {
-        const saved = localStorage.getItem("puppies_data");
-        if (saved) {
-            puppies = JSON.parse(saved);
-        } else {
-            puppies = [];
-        }
-    } catch (e) {
-        puppies = [];
-    }
-    groqApiKey = localStorage.getItem("groq_api_key") || "";
+        var s = localStorage.getItem("ph_puppies");
+        puppies = s ? JSON.parse(s) : [];
+    } catch(e) { puppies = []; }
+    groqKey = localStorage.getItem("ph_groq") || "";
 }
-
 function saveData() {
-    localStorage.setItem("puppies_data", JSON.stringify(puppies));
-    if (groqApiKey) {
-        localStorage.setItem("groq_api_key", groqApiKey);
-    }
+    localStorage.setItem("ph_puppies", JSON.stringify(puppies));
+    if (groqKey) localStorage.setItem("ph_groq", groqKey);
+}
+function genId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2,6);
 }
 
-// === ГЕНЕРАЦИЯ ID ===
-function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+// === TOAST ===
+function toast(msg, type) {
+    var c = document.getElementById("toast-container");
+    if (!c) return;
+    var t = document.createElement("div");
+    t.className = "toast toast-" + (type || "info");
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(function() {
+        t.classList.add("toast-hide");
+        setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+    }, 3000);
 }
 
-// === ПЕРЕКЛЮЧЕНИЕ ТАБОВ ===
-function switchTab(tabName) {
-    currentTab = tabName;
-    
-    // Обновляем активный таб
+// === TABS ===
+function switchTab(name) {
+    currentTab = name;
     var tabs = document.querySelectorAll(".tab");
     for (var i = 0; i < tabs.length; i++) {
-        var tab = tabs[i];
-        if (tab.getAttribute("data-tab") === tabName) {
-            tab.classList.add("active");
-        } else {
-            tab.classList.remove("active");
-        }
+        tabs[i].classList.toggle("active", tabs[i].getAttribute("data-tab") === name);
     }
-    
-    // Рендерим контент
     renderContent();
+    // FAB
+    var fab = document.getElementById("fab");
+    if (fab) {
+        fab.classList.toggle("hidden", name !== "puppies");
+        fab.classList.toggle("pulse", name === "puppies" && puppies.length === 0);
+    }
+    // MainButton
+    if (tg && tg.MainButton) {
+        tg.MainButton.hide();
+    }
 }
 
-// === РЕНДЕР КОНТЕНТА ===
+// === RENDER ===
 function renderContent() {
-    var content = document.getElementById("content");
-    if (!content) return;
-    
-    switch (currentTab) {
-        case "puppies":
-            renderPuppies(content);
-            break;
-        case "posts":
-            renderPosts(content);
-            break;
-        case "ai":
-            renderAI(content);
-            break;
-        default:
-            renderPuppies(content);
-    }
+    var el = document.getElementById("content");
+    if (!el) return;
+    if (currentTab === "puppies") renderPuppies(el);
+    else if (currentTab === "posts") renderPosts(el);
+    else if (currentTab === "ai") renderAI(el);
 }
 
-// === РЕНДЕР СПИСКА ЩЕНКОВ ===
-function renderPuppies(container) {
-    var html = "";
-    
-    // Статистика
-    var available = 0;
-    var reserved = 0;
-    var sold = 0;
-    for (var i = 0; i < puppies.length; i++) {
-        var s = puppies[i].status;
-        if (s === "available") available++;
-        else if (s === "reserved") reserved++;
-        else if (s === "sold") sold++;
+// === PUPPIES LIST ===
+function renderPuppies(el) {
+    var ok=0, res=0, sold=0;
+    for (var i=0;i<puppies.length;i++) {
+        if (puppies[i].status==="available") ok++;
+        else if (puppies[i].status==="reserved") res++;
+        else sold++;
     }
-    
-    html += '<div class="stats-row">';
-    html += '<div class="stat-card"><div class="stat-number">' + available + '</div><div class="stat-label">Свободны</div></div>';
-    html += '<div class="stat-card"><div class="stat-number">' + reserved + '</div><div class="stat-label">Бронь</div></div>';
-    html += '<div class="stat-card"><div class="stat-number">' + sold + '</div><div class="stat-label">Проданы</div></div>';
-    html += '</div>';
-    
-    // Кнопка добавления
-    html += '<button class="btn btn-primary" style="margin-bottom: 16px" onclick="showAddPuppyForm()">➕ Добавить щенка</button>';
-    
+    var h = '';
+    h += '<div class="stats">';
+    h += '<div class="stat"><div class="stat-num c-ok">'+ok+'</div><div class="stat-lbl">Свободны</div></div>';
+    h += '<div class="stat"><div class="stat-num c-res">'+res+'</div><div class="stat-lbl">Бронь</div></div>';
+    h += '<div class="stat"><div class="stat-num c-sold">'+sold+'</div><div class="stat-lbl">Проданы</div></div>';
+    h += '</div>';
     if (puppies.length === 0) {
-        html += '<div class="empty-state">';
-        html += '<div class="emoji">🐾</div>';
-        html += '<p>Пока нет щенков.<br>Добавьте первого!</p>';
-        html += '</div>';
+        h += '<div class="empty"><div class="empty-icon">&#x1F436;</div>';
+        h += '<p>Пока нет щенков<br>Нажмите + чтобы добавить первого!</p></div>';
     } else {
-        for (var i = 0; i < puppies.length; i++) {
-            html += renderPuppyCard(puppies[i], i);
-        }
+        for (var i=0;i<puppies.length;i++) h += puppyCard(puppies[i],i);
     }
-    
-    container.innerHTML = html;
+    el.innerHTML = h;
+}
+function puppyCard(p,i) {
+    var bc = breedClass(p.breed);
+    var av = breedEmoji(p.breed);
+    var bn = breedName(p.breed);
+    var gn = p.gender==="male" ? "\u2642\uFE0F" : "\u2640\uFE0F";
+    var sb, sc;
+    if (p.status==="available"){sb="Свободен";sc="badge-ok";}
+    else if(p.status==="reserved"){sb="Бронь";sc="badge-res";}
+    else{sb="Продан";sc="badge-sold";}
+    var c = '<div class="card card-'+bc+'" onclick="showDetail('+i+')" style="animation-delay:'+(i*0.05)+'s">';
+    c += '<div class="card-row">';
+    c += '<div class="avatar avatar-'+bc+'">'+av+'</div>';
+    c += '<div class="card-info">';
+    c += '<div class="card-header"><div><div class="card-title">'+esc(p.name)+' '+gn+'</div>';
+    c += '<div class="card-sub">'+esc(bn)+'</div></div>';
+    c += '<span class="badge '+sc+'">'+sb+'</span></div>';
+    c += '<div class="card-meta">';
+    if (p.age) c += '<span>&#x1F4C5; '+esc(p.age)+'</span>';
+    if (p.color) c += '<span>&#x1F3A8; '+esc(p.color)+'</span>';
+    if (p.price) c += '<span class="price">'+fmtPrice(p.price)+' &#x20BD;</span>';
+    c += '</div></div></div></div>';
+    return c;
 }
 
-// === РЕНДЕР КАРТОЧКИ ЩЕНКА ===
-function renderPuppyCard(puppy, index) {
-    var statusBadge = "";
-    var statusClass = "";
-    if (puppy.status === "available") {
-        statusBadge = "Свободен";
-        statusClass = "badge-available";
-    } else if (puppy.status === "reserved") {
-        statusBadge = "Бронь";
-        statusClass = "badge-reserved";
-    } else {
-        statusBadge = "Продан";
-        statusClass = "badge-sold";
-    }
-    
-    var genderEmoji = puppy.gender === "male" ? "♂️" : "♀️";
-    var breedEmoji = "🐶";
-    if (puppy.breed === "chihuahua") breedEmoji = "🐕";
-    else if (puppy.breed === "toypoodle") breedEmoji = "🐩";
-    else if (puppy.breed === "maltipoo") breedEmoji = "🧸";
-    
-    var breedName = getBreedName(puppy.breed);
-    
-    var card = '<div class="card" onclick="showPuppyDetail(' + index + ')">';
-    card += '<div class="puppy-card-row">';
-    card += '<div class="puppy-photo">' + breedEmoji + '</div>';
-    card += '<div class="puppy-card-info">';
-    card += '<div class="card-header">';
-    card += '<div>';
-    card += '<div class="card-title">' + escapeHtml(puppy.name) + ' ' + genderEmoji + '</div>';
-    card += '<div class="card-subtitle">' + breedName + '</div>';
-    card += '</div>';
-    card += '<span class="badge ' + statusClass + '">' + statusBadge + '</span>';
-    card += '</div>';
-    
-    var details = [];
-    if (puppy.age) details.push(puppy.age);
-    if (puppy.color) details.push(puppy.color);
-    if (puppy.price) details.push(formatPrice(puppy.price) + " ₽");
-    
-    if (details.length > 0) {
-        card += '<div class="card-body" style="font-size:12px;color:var(--text-secondary)">' + escapeHtml(details.join(" • ")) + '</div>';
-    }
-    
-    card += '</div></div></div>';
-    return card;
+// === DETAIL ===
+function showDetail(i) {
+    var p = puppies[i]; if(!p) return;
+    var h = '';
+    var bn = breedName(p.breed);
+    var gn = p.gender==="male"?"&#x2642;&#xFE0F; Мальчик":"&#x2640;&#xFE0F; Девочка";
+    h += '<div style="text-align:center;margin-bottom:16px">';
+    h += '<div class="avatar avatar-'+breedClass(p.breed)+'" style="width:72px;height:72px;font-size:36px;margin:0 auto">'+breedEmoji(p.breed)+'</div>';
+    h += '</div>';
+    h += fieldRow("Порода", bn);
+    h += fieldRow("Пол", gn);
+    if(p.age) h += fieldRow("Возраст", esc(p.age));
+    if(p.color) h += fieldRow("Окрас", esc(p.color));
+    if(p.price) h += fieldRow("Цена", '<span class="price">'+fmtPrice(p.price)+' &#x20BD;</span>');
+    if(p.description) h += fieldRow("Описание", esc(p.description));
+    h += '<div class="card-actions" style="margin-top:16px">';
+    h += '<button class="btn btn-sm btn-secondary" onclick="editPuppy('+i+')">&#x270F;&#xFE0F; Изменить</button>';
+    h += '<button class="btn btn-sm btn-pink" onclick="genPost('+i+')">&#x1F4DD; Пост</button>';
+    h += '<button class="btn btn-sm btn-danger" onclick="delPuppy('+i+')">&#x1F5D1; Удалить</button>';
+    h += '</div>';
+    showModal(esc(p.name), h);
+}
+function fieldRow(label, value) {
+    return '<div class="fg"><div class="fl">'+label+'</div><div>'+value+'</div></div>';
 }
 
-// === ДЕТАЛИ ЩЕНКА ===
-function showPuppyDetail(index) {
-    var puppy = puppies[index];
-    if (!puppy) return;
-    
-    var genderText = puppy.gender === "male" ? "Мальчик ♂️" : "Девочка ♀️";
-    var breedName = getBreedName(puppy.breed);
-    
-    var html = "";
-    html += '<div class="form-group"><span class="form-label">Порода</span><div>' + escapeHtml(breedName) + '</div></div>';
-    html += '<div class="form-group"><span class="form-label">Пол</span><div>' + genderText + '</div></div>';
-    
-    if (puppy.age) {
-        html += '<div class="form-group"><span class="form-label">Возраст</span><div>' + escapeHtml(puppy.age) + '</div></div>';
-    }
-    if (puppy.color) {
-        html += '<div class="form-group"><span class="form-label">Окрас</span><div>' + escapeHtml(puppy.color) + '</div></div>';
-    }
-    if (puppy.price) {
-        html += '<div class="form-group"><span class="form-label">Цена</span><div>' + formatPrice(puppy.price) + ' ₽</div></div>';
-    }
-    if (puppy.description) {
-        html += '<div class="form-group"><span class="form-label">Описание</span><div>' + escapeHtml(puppy.description) + '</div></div>';
-    }
-    
-    html += '<div class="card-actions">';
-    html += '<button class="btn btn-small btn-secondary" onclick="editPuppy(' + index + ')">✏️ Редактировать</button>';
-    html += '<button class="btn btn-small btn-warning" onclick="generatePostForPuppy(' + index + ')">📝 Пост</button>';
-    html += '<button class="btn btn-small btn-danger" onclick="deletePuppy(' + index + ')">🗑 Удалить</button>';
-    html += '</div>';
-    
-    showModal(escapeHtml(puppy.name), html);
-}
-
-// === ФОРМА ДОБАВЛЕНИЯ ЩЕНКА ===
+// === ADD/EDIT FORM ===
 function showAddPuppyForm() {
-    var html = buildPuppyForm(null, -1);
-    showModal("Новый щенок", html);
+    showModal("Новый щенок", buildForm(null,-1));
 }
-
-function editPuppy(index) {
-    var puppy = puppies[index];
-    if (!puppy) return;
-    var html = buildPuppyForm(puppy, index);
-    showModal("Редактировать", html);
+function editPuppy(i) {
+    showModal("Редактировать", buildForm(puppies[i],i));
 }
-
-function buildPuppyForm(puppy, index) {
-    var name = puppy ? puppy.name : "";
-    var breed = puppy ? puppy.breed : "chihuahua";
-    var gender = puppy ? puppy.gender : "female";
-    var age = puppy ? (puppy.age || "") : "";
-    var color = puppy ? (puppy.color || "") : "";
-    var price = puppy ? (puppy.price || "") : "";
-    var status = puppy ? (puppy.status || "available") : "available";
-    var description = puppy ? (puppy.description || "") : "";
-    
-    var html = '<div id="puppy-form">';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Кличка *</label>';
-    html += '<input type="text" class="form-input" id="pf-name" value="' + escapeAttr(name) + '" placeholder="Имя щенка">';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Порода</label>';
-    html += '<select class="form-select" id="pf-breed">';
-    html += '<option value="chihuahua"' + (breed === "chihuahua" ? " selected" : "") + '>Чихуахуа</option>';
-    html += '<option value="toypoodle"' + (breed === "toypoodle" ? " selected" : "") + '>Той-пудель</option>';
-    html += '<option value="maltipoo"' + (breed === "maltipoo" ? " selected" : "") + '>Мальтипу</option>';
-    html += '<option value="other"' + (breed === "other" ? " selected" : "") + '>Другая</option>';
-    html += '</select>';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Пол</label>';
-    html += '<select class="form-select" id="pf-gender">';
-    html += '<option value="female"' + (gender === "female" ? " selected" : "") + '>Девочка ♀️</option>';
-    html += '<option value="male"' + (gender === "male" ? " selected" : "") + '>Мальчик ♂️</option>';
-    html += '</select>';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Возраст</label>';
-    html += '<input type="text" class="form-input" id="pf-age" value="' + escapeAttr(age) + '" placeholder="Например: 3 месяца">';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Окрас</label>';
-    html += '<input type="text" class="form-input" id="pf-color" value="' + escapeAttr(color) + '" placeholder="Например: рыжий">';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Цена (₽)</label>';
-    html += '<input type="number" class="form-input" id="pf-price" value="' + escapeAttr(price) + '" placeholder="Например: 50000">';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Статус</label>';
-    html += '<select class="form-select" id="pf-status">';
-    html += '<option value="available"' + (status === "available" ? " selected" : "") + '>Свободен</option>';
-    html += '<option value="reserved"' + (status === "reserved" ? " selected" : "") + '>Забронирован</option>';
-    html += '<option value="sold"' + (status === "sold" ? " selected" : "") + '>Продан</option>';
-    html += '</select>';
-    html += '</div>';
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Описание</label>';
-    html += '<textarea class="form-textarea" id="pf-desc" placeholder="Описание щенка...">' + escapeHtml(description) + '</textarea>';
-    html += '</div>';
-    
-    html += '<button class="btn btn-success" onclick="savePuppy(' + index + ')">💾 Сохранить</button>';
-    html += '</div>';
-    
-    return html;
+function buildForm(p,idx) {
+    var n=p?p.name:"", b=p?p.breed:"chihuahua", g=p?p.gender:"female";
+    var age=p?p.age||"":"", col=p?p.color||"":"", pr=p?p.price||"":"";
+    var st=p?p.status||"available":"available", desc=p?p.description||"":"";
+    var h='';
+    h+='<div class="fg"><label class="fl">Кличка *</label>';
+    h+='<input type="text" class="fi" id="pf-n" value="'+escA(n)+'" placeholder="Имя щенка"></div>';
+    h+='<div class="fg"><label class="fl">Порода</label><select class="fs" id="pf-b">';
+    h+=opt("chihuahua","Чихуахуа",b)+opt("toypoodle","Той-пудель",b);
+    h+=opt("maltipoo","Мальтипу",b)+opt("other","Другая",b);
+    h+='</select></div>';
+    h+='<div class="fg"><label class="fl">Пол</label><select class="fs" id="pf-g">';
+    h+=opt("female","Девочка &#x2640;&#xFE0F;",g)+opt("male","Мальчик &#x2642;&#xFE0F;",g);
+    h+='</select></div>';
+    h+='<div class="fg"><label class="fl">Возраст</label>';
+    h+='<input type="text" class="fi" id="pf-a" value="'+escA(age)+'" placeholder="3 месяца"></div>';
+    h+='<div class="fg"><label class="fl">Окрас</label>';
+    h+='<input type="text" class="fi" id="pf-c" value="'+escA(col)+'" placeholder="Рыжий"></div>';
+    h+='<div class="fg"><label class="fl">Цена (&#x20BD;)</label>';
+    h+='<input type="number" class="fi" id="pf-p" value="'+escA(pr)+'" placeholder="50000"></div>';
+    h+='<div class="fg"><label class="fl">Статус</label><select class="fs" id="pf-s">';
+    h+=opt("available","Свободен",st)+opt("reserved","Забронирован",st)+opt("sold","Продан",st);
+    h+='</select></div>';
+    h+='<div class="fg"><label class="fl">Описание</label>';
+    h+='<textarea class="ft" id="pf-d" placeholder="О щенке...">'+esc(desc)+'</textarea></div>';
+    h+='<button class="btn btn-success" onclick="savePuppy('+idx+')">&#x1F4BE; Сохранить</button>';
+    return h;
 }
-
-// === СОХРАНЕНИЕ ЩЕНКА ===
-function savePuppy(index) {
-    var nameEl = document.getElementById("pf-name");
-    var breedEl = document.getElementById("pf-breed");
-    var genderEl = document.getElementById("pf-gender");
-    var ageEl = document.getElementById("pf-age");
-    var colorEl = document.getElementById("pf-color");
-    var priceEl = document.getElementById("pf-price");
-    var statusEl = document.getElementById("pf-status");
-    var descEl = document.getElementById("pf-desc");
-    
-    if (!nameEl || !nameEl.value.trim()) {
-        alert("Введите кличку щенка!");
-        return;
-    }
-    
-    var data = {
-        id: (index >= 0 && puppies[index]) ? puppies[index].id : generateId(),
-        name: nameEl.value.trim(),
-        breed: breedEl ? breedEl.value : "chihuahua",
-        gender: genderEl ? genderEl.value : "female",
-        age: ageEl ? ageEl.value.trim() : "",
-        color: colorEl ? colorEl.value.trim() : "",
-        price: priceEl ? priceEl.value.trim() : "",
-        status: statusEl ? statusEl.value : "available",
-        description: descEl ? descEl.value.trim() : "",
-        created: (index >= 0 && puppies[index]) ? puppies[index].created : new Date().toISOString()
+function opt(val,text,sel){
+    return '<option value="'+val+'"'+(val===sel?' selected':'')+'>'+text+'</option>';
+}
+function savePuppy(idx) {
+    var ne=document.getElementById("pf-n");
+    if(!ne||!ne.value.trim()){toast("Введите кличку!","warn");return;}
+    var d={
+        id:(idx>=0&&puppies[idx])?puppies[idx].id:genId(),
+        name:ne.value.trim(),
+        breed:gv("pf-b","chihuahua"), gender:gv("pf-g","female"),
+        age:gv("pf-a",""), color:gv("pf-c",""), price:gv("pf-p",""),
+        status:gv("pf-s","available"), description:gv("pf-d",""),
+        created:(idx>=0&&puppies[idx])?puppies[idx].created:new Date().toISOString()
     };
-    
-    if (index >= 0) {
-        puppies[index] = data;
+    if(idx>=0) puppies[idx]=d; else puppies.push(d);
+    saveData(); hideModal(); renderContent();
+    toast(idx>=0?"Щенок обновлён ✅":"Щенок добавлен ✅","ok");
+}
+function gv(id,def){var e=document.getElementById(id);return e?e.value.trim():def;}
+function delPuppy(i) {
+    if(!confirm("Удалить "+puppies[i].name+"?")) return;
+    puppies.splice(i,1); saveData(); hideModal(); renderContent();
+    toast("Удалён","info");
+}
+
+// === POSTS ===
+function renderPosts(el) {
+    var h='';
+    h+='<button class="btn btn-primary" style="margin-bottom:16px" onclick="showCreatePost()">&#x270D;&#xFE0F; Создать пост</button>';
+    var avail=[];
+    for(var i=0;i<puppies.length;i++) if(puppies[i].status==="available") avail.push(i);
+    if(avail.length>0){
+        h+='<div class="card"><div class="card-title">&#x26A1; Быстрый пост</div>';
+        h+='<div class="card-body"><p style="color:var(--text2);font-size:13px;margin-bottom:12px">Выберите щенка для AI-поста:</p>';
+        for(var j=0;j<avail.length;j++){
+            var idx=avail[j], p=puppies[idx];
+            h+='<button class="btn btn-sm btn-ghost" style="margin-bottom:8px" onclick="genPost('+idx+')">'+breedEmoji(p.breed)+' '+esc(p.name)+'</button>';
+        }
+        h+='</div></div>';
+    }
+    if(avail.length===0&&puppies.length===0){
+        h+='<div class="empty"><div class="empty-icon">&#x1F4DD;</div>';
+        h+='<p>Добавьте щенков чтобы создавать посты</p></div>';
+    }
+    el.innerHTML=h;
+}
+function showCreatePost(){
+    var h='';
+    h+='<div class="fg"><label class="fl">Тип</label><select class="fs" id="pt-type">';
+    h+='<option value="sale">Продажа щенка</option>';
+    h+='<option value="info">Информационный</option>';
+    h+='<option value="avito">Для Авито</option></select></div>';
+    if(puppies.length>0){
+        h+='<div class="fg"><label class="fl">Щенок</label><select class="fs" id="pt-pup">';
+        h+='<option value="-1">Без привязки</option>';
+        for(var i=0;i<puppies.length;i++){
+            h+='<option value="'+i+'">'+esc(puppies[i].name)+' ('+breedName(puppies[i].breed)+')</option>';
+        }
+        h+='</select></div>';
+    }
+    h+='<div class="fg"><label class="fl">Пожелания</label>';
+    h+='<textarea class="ft" id="pt-extra" placeholder="Упомянуть прививки, эмодзи..."></textarea></div>';
+    h+='<button class="btn btn-primary" onclick="doGenPost()">&#x1F916; Сгенерировать</button>';
+    showModal("Создать пост",h);
+}
+function genPost(i) {
+    var p=puppies[i]; if(!p) return;
+    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    var bn=breedName(p.breed), gn=p.gender==="male"?"мальчик":"девочка";
+    var pr="Напиши привлекательный пост для Instagram/Telegram о продаже щенка. ";
+    pr+="Порода: "+bn+". Кличка: "+p.name+". Пол: "+gn+". ";
+    if(p.age) pr+="Возраст: "+p.age+". ";
+    if(p.color) pr+="Окрас: "+p.color+". ";
+    if(p.price) pr+="Цена: "+p.price+" руб. ";
+    if(p.description) pr+="Описание: "+p.description+". ";
+    pr+="Добавь эмодзи и хештеги. На русском.";
+    callAI(pr,"Пост: "+p.name);
+}
+function doGenPost(){
+    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    var type=gv("pt-type","sale"), pi=parseInt(gv("pt-pup","-1")), extra=gv("pt-extra","");
+    var pr="";
+    if(type==="sale"&&pi>=0){
+        var p=puppies[pi];
+        pr="Напиши пост продажи щенка. Порода: "+breedName(p.breed)+", кличка: "+p.name;
+        pr+=", пол: "+(p.gender==="male"?"мальчик":"девочка");
+        if(p.age) pr+=", возраст: "+p.age;
+        if(p.color) pr+=", окрас: "+p.color;
+        if(p.price) pr+=", цена: "+p.price+" руб";
+        pr+=". С эмодзи и хештегами.";
+    } else if(type==="avito"){
+        pr="Напиши объявление для Авито о продаже щенка мелкой породы. Заголовок + описание, без хештегов. ";
+        if(pi>=0) pr+="Порода: "+breedName(puppies[pi].breed)+", кличка: "+puppies[pi].name+". ";
     } else {
-        puppies.push(data);
+        pr="Напиши информационный пост для Telegram-канала питомника мелких пород собак. С эмодзи.";
     }
-    
-    saveData();
-    hideModal();
-    renderContent();
+    if(extra) pr+=" Дополнительно: "+extra;
+    pr+=" На русском.";
+    callAI(pr,"Сгенерированный пост");
 }
 
-// === УДАЛЕНИЕ ЩЕНКА ===
-function deletePuppy(index) {
-    if (!confirm("Удалить щенка " + puppies[index].name + "?")) return;
-    puppies.splice(index, 1);
-    saveData();
-    hideModal();
-    renderContent();
+// === AI TAB ===
+function renderAI(el) {
+    var ks=groqKey?"&#x2705; Ключ установлен":"&#x274C; Ключ не задан";
+    var h='';
+    h+='<div class="card"><div class="card-title">&#x1F916; AI Ассистент</div>';
+    h+='<div class="card-body"><p style="color:var(--text2);font-size:13px">Groq API: '+ks+'</p>';
+    if(!groqKey) h+='<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="askKey()">&#x1F511; Установить ключ</button>';
+    h+='</div></div>';
+    h+='<div class="card"><div class="card-title">&#x1F4AC; Свободный запрос</div>';
+    h+='<div class="card-body" style="margin-top:8px">';
+    h+='<textarea class="ft" id="ai-q" placeholder="Задайте любой вопрос..."></textarea>';
+    h+='<button class="btn btn-primary" style="margin-top:8px" onclick="doFreeAI()">&#x1F680; Отправить</button>';
+    h+='</div></div>';
+    h+='<div class="card"><div class="card-title">&#x26A1; Быстрые действия</div>';
+    h+='<div class="card-actions" style="margin-top:8px">';
+    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ(\'hashtags\')">&#x1F3F7; Хештеги</button>';
+    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ(\'plan\')">&#x1F4C5; Контент-план</button>';
+    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ(\'tips\')">&#x1F4A1; Советы</button>';
+    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ(\'names\')">&#x1F4DB; Имена</button>';
+    h+='</div></div>';
+    el.innerHTML=h;
+}
+function aiQ(act){
+    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    var pr="",tt="";
+    if(act==="hashtags"){pr="Сгенерируй 30 хештегов для Instagram для питомника мелких пород собак (чихуахуа, той-пудель, мальтипу). Раздели по группам. На русском и английском.";tt="Хештеги";}
+    else if(act==="plan"){pr="Составь контент-план на неделю для Telegram-канала питомника мелких пород собак. 7 постов с темами и временем. На русском.";tt="Контент-план";}
+    else if(act==="tips"){pr="Дай 10 советов по продвижению питомника мелких пород в соцсетях. Конкретные и практичные. На русском.";tt="Советы";}
+    else if(act==="names"){pr="Предложи 20 красивых имён для щенков мелких пород. 10 для мальчиков и 10 для девочек. На русском.";tt="Имена";}
+    callAI(pr,tt);
+}
+function doFreeAI(){
+    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    var q=gv("ai-q",""); if(!q){toast("Введите запрос","warn");return;}
+    callAI(q,"Ответ AI");
 }
 
-// === РЕНДЕР ПОСТОВ ===
-function renderPosts(container) {
-    var html = "";
-    
-    html += '<button class="btn btn-primary" style="margin-bottom:16px" onclick="showCreatePost()">✍️ Создать пост</button>';
-    
-    if (puppies.length === 0) {
-        html += '<div class="empty-state">';
-        html += '<div class="emoji">📝</div>';
-        html += '<p>Сначала добавьте щенков,<br>чтобы создавать посты</p>';
-        html += '</div>';
-    } else {
-        html += '<div class="card">';
-        html += '<div class="card-title">Быстрый пост</div>';
-        html += '<div class="card-body" style="margin-top:8px">';
-        html += '<p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">Выберите щенка для генерации поста через AI:</p>';
-        
-        for (var i = 0; i < puppies.length; i++) {
-            if (puppies[i].status === "available") {
-                var breedName = getBreedName(puppies[i].breed);
-                html += '<button class="btn btn-small btn-secondary" style="margin-bottom:8px" ';
-                html += 'onclick="generatePostForPuppy(' + i + ')">';
-                html += '📝 ' + escapeHtml(puppies[i].name) + ' (' + escapeHtml(breedName) + ')';
-                html += '</button>';
-            }
-        }
-        
-        html += '</div></div>';
-    }
-    
-    container.innerHTML = html;
-}
-
-// === СОЗДАНИЕ ПОСТА ===
-function showCreatePost() {
-    var html = "";
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Тип поста</label>';
-    html += '<select class="form-select" id="post-type">';
-    html += '<option value="sale">Продажа щенка</option>';
-    html += '<option value="info">Информационный</option>';
-    html += '<option value="avito">Текст для Авито</option>';
-    html += '</select>';
-    html += '</div>';
-    
-    if (puppies.length > 0) {
-        html += '<div class="form-group">';
-        html += '<label class="form-label">Щенок</label>';
-        html += '<select class="form-select" id="post-puppy">';
-        html += '<option value="-1">Без привязки к щенку</option>';
-        for (var i = 0; i < puppies.length; i++) {
-            html += '<option value="' + i + '">' + escapeHtml(puppies[i].name) + ' (' + getBreedName(puppies[i].breed) + ')</option>';
-        }
-        html += '</select>';
-        html += '</div>';
-    }
-    
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Дополнительные пожелания</label>';
-    html += '<textarea class="form-textarea" id="post-extra" placeholder="Например: упомянуть прививки, добавить эмодзи..."></textarea>';
-    html += '</div>';
-    
-    html += '<button class="btn btn-primary" onclick="doGeneratePost()">🤖 Сгенерировать через AI</button>';
-    
-    showModal("Создать пост", html);
-}
-
-// === ГЕНЕРАЦИЯ ПОСТА ДЛЯ ЩЕНКА ===
-function generatePostForPuppy(index) {
-    var puppy = puppies[index];
-    if (!puppy) return;
-    
-    if (!groqApiKey) {
-        showSettingsForKey("Для генерации постов нужен Groq API ключ");
-        return;
-    }
-    
-    var breedName = getBreedName(puppy.breed);
-    var genderText = puppy.gender === "male" ? "мальчик" : "девочка";
-    
-    var prompt = "Напиши привлекательный пост для Instagram/Telegram о продаже щенка. ";
-    prompt += "Порода: " + breedName + ". ";
-    prompt += "Кличка: " + puppy.name + ". ";
-    prompt += "Пол: " + genderText + ". ";
-    if (puppy.age) prompt += "Возраст: " + puppy.age + ". ";
-    if (puppy.color) prompt += "Окрас: " + puppy.color + ". ";
-    if (puppy.price) prompt += "Цена: " + puppy.price + " руб. ";
-    if (puppy.description) prompt += "Описание: " + puppy.description + ". ";
-    prompt += "Добавь эмодзи и хештеги. Пост на русском языке.";
-    
-    callGroqAI(prompt, "Пост: " + puppy.name);
-}
-
-// === ГЕНЕРАЦИЯ ПОСТА (из формы) ===
-function doGeneratePost() {
-    if (!groqApiKey) {
-        showSettingsForKey("Для генерации нужен Groq API ключ");
-        return;
-    }
-    
-    var typeEl = document.getElementById("post-type");
-    var puppyEl = document.getElementById("post-puppy");
-    var extraEl = document.getElementById("post-extra");
-    
-    var postType = typeEl ? typeEl.value : "sale";
-    var puppyIndex = puppyEl ? parseInt(puppyEl.value) : -1;
-    var extra = extraEl ? extraEl.value.trim() : "";
-    
-    var prompt = "";
-    
-    if (postType === "sale" && puppyIndex >= 0) {
-        var p = puppies[puppyIndex];
-        prompt = "Напиши пост для продажи щенка. Порода: " + getBreedName(p.breed);
-        prompt += ", кличка: " + p.name;
-        prompt += ", пол: " + (p.gender === "male" ? "мальчик" : "девочка");
-        if (p.age) prompt += ", возраст: " + p.age;
-        if (p.color) prompt += ", окрас: " + p.color;
-        if (p.price) prompt += ", цена: " + p.price + " руб";
-        prompt += ". Добавь эмодзи и хештеги.";
-    } else if (postType === "avito") {
-        prompt = "Напиши текст объявления для Авито о продаже щенка мелкой породы. ";
-        prompt += "Формат Авито: заголовок, описание, без хештегов. ";
-        if (puppyIndex >= 0) {
-            var p2 = puppies[puppyIndex];
-            prompt += "Порода: " + getBreedName(p2.breed) + ", кличка: " + p2.name + ". ";
-        }
-    } else if (postType === "info") {
-        prompt = "Напиши информационный пост для Telegram-канала питомника мелких пород собак. ";
-        prompt += "Тема: уход за щенком или интересный факт о породе. С эмодзи.";
-    } else {
-        prompt = "Напиши пост для соцсетей питомника мелких пород собак. С эмодзи и хештегами.";
-    }
-    
-    if (extra) {
-        prompt += " Дополнительно: " + extra;
-    }
-    
-    prompt += " Пиши на русском языке.";
-    
-    callGroqAI(prompt, "Сгенерированный пост");
-}
-
-// === РЕНДЕР AI ВКЛАДКИ ===
-function renderAI(container) {
-    var html = "";
-    
-    var keyStatus = groqApiKey ? "✅ Ключ установлен" : "❌ Ключ не задан";
-    
-    html += '<div class="card">';
-    html += '<div class="card-title">🤖 AI Ассистент</div>';
-    html += '<div class="card-body" style="margin-top:8px">';
-    html += '<p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px">Groq API: ' + keyStatus + '</p>';
-    if (!groqApiKey) {
-        html += '<button class="btn btn-small btn-primary" style="margin-bottom:12px" onclick="showSettingsForKey()">🔑 Установить ключ</button>';
-    }
-    html += '</div></div>';
-    
-    html += '<div class="card">';
-    html += '<div class="card-title">💬 Свободный запрос</div>';
-    html += '<div class="card-body" style="margin-top:8px">';
-    html += '<textarea class="form-textarea" id="ai-free-prompt" placeholder="Задайте любой вопрос AI..."></textarea>';
-    html += '<button class="btn btn-primary" style="margin-top:8px" onclick="doFreeAI()">🚀 Отправить</button>';
-    html += '</div></div>';
-    
-    html += '<div class="card">';
-    html += '<div class="card-title">⚡ Быстрые действия</div>';
-    html += '<div class="card-actions" style="margin-top:8px">';
-    html += '<button class="btn btn-small btn-secondary" onclick="aiQuick(\'hashtags\')">🏷 Хештеги</button>';
-    html += '<button class="btn btn-small btn-secondary" onclick="aiQuick(\'contentplan\')">📅 Контент-план</button>';
-    html += '<button class="btn btn-small btn-secondary" onclick="aiQuick(\'tips\')">💡 Советы</button>';
-    html += '<button class="btn btn-small btn-secondary" onclick="aiQuick(\'names\')">📛 Имена</button>';
-    html += '</div></div>';
-    
-    html += '<div id="ai-result-container"></div>';
-    
-    container.innerHTML = html;
-}
-
-// === БЫСТРЫЕ AI ДЕЙСТВИЯ ===
-function aiQuick(action) {
-    if (!groqApiKey) {
-        showSettingsForKey("Нужен Groq API ключ");
-        return;
-    }
-    
-    var prompt = "";
-    var title = "";
-    
-    switch (action) {
-        case "hashtags":
-            prompt = "Сгенерируй 30 хештегов для Instagram для питомника мелких пород собак (чихуахуа, той-пудель, мальтипу). Раздели на группы: общие, по породам, продажа. На русском и английском.";
-            title = "Хештеги";
-            break;
-        case "contentplan":
-            prompt = "Составь контент-план на неделю для Telegram-канала питомника мелких пород собак. 7 постов с темами, типами контента и лучшим временем публикации. На русском.";
-            title = "Контент-план";
-            break;
-        case "tips":
-            prompt = "Дай 10 советов по продвижению питомника мелких пород собак в социальных сетях. Практичные и конкретные советы. На русском.";
-            title = "Советы по продвижению";
-            break;
-        case "names":
-            prompt = "Предложи 20 красивых имён для щенков мелких пород. 10 для мальчиков и 10 для девочек. Модные, милые, подходящие для чихуахуа, той-пуделя, мальтипу. На русском.";
-            title = "Имена для щенков";
-            break;
-    }
-    
-    callGroqAI(prompt, title);
-}
-
-// === СВОБОДНЫЙ AI ЗАПРОС ===
-function doFreeAI() {
-    if (!groqApiKey) {
-        showSettingsForKey("Нужен Groq API ключ");
-        return;
-    }
-    
-    var promptEl = document.getElementById("ai-free-prompt");
-    if (!promptEl || !promptEl.value.trim()) {
-        alert("Введите запрос!");
-        return;
-    }
-    
-    callGroqAI(promptEl.value.trim(), "Ответ AI");
-}
-
-// === ВЫЗОВ GROQ API ===
-function callGroqAI(prompt, resultTitle) {
-    // Показываем лоадер
-    showModal("🤖 " + resultTitle, '<div class="loader"><div class="spinner"></div><p style="margin-top:12px">Генерирую...</p></div>');
-    
-    var requestBody = JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-            {
-                role: "system",
-                content: "Ты — помощник питомника мелких пород собак (чихуахуа, той-пудель, мальтипу). Отвечай на русском языке. Будь полезным, конкретным и креативным."
-            },
-            {
-                role: "user",
-                content: prompt
-            }
-        ],
-        temperature: 0.7,
-        max_tokens: 1500
-    });
-    
-    fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + groqApiKey
-        },
-        body: requestBody
+// === GROQ API ===
+function callAI(prompt, title) {
+    showModal("&#x1F916; "+title, '<div class="loader"><div class="spinner"></div><p style="margin-top:12px;color:var(--text2)">Генерирую...</p></div>');
+    fetch("https://api.groq.com/openai/v1/chat/completions",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+groqKey},
+        body:JSON.stringify({
+            model:"llama-3.3-70b-versatile",
+            messages:[
+                {role:"system",content:"Ты — помощник питомника мелких пород собак (чихуахуа, той-пудель, мальтипу). Отвечай на русском. Будь полезным и креативным."},
+                {role:"user",content:prompt}
+            ],
+            temperature:0.7, max_tokens:1500
+        })
     })
-    .then(function(response) {
-        if (!response.ok) {
-            throw new Error("HTTP " + response.status);
-        }
-        return response.json();
+    .then(function(r){if(!r.ok) throw new Error("HTTP "+r.status); return r.json();})
+    .then(function(d){
+        var text=(d.choices&&d.choices[0]&&d.choices[0].message)?d.choices[0].message.content:"Нет ответа";
+        pendingPost = text;
+        var rh='<div class="ai-box">'+esc(text)+'</div>';
+        rh+='<div class="ai-actions">';
+        rh+='<button class="btn btn-sm btn-secondary" onclick="copyText()">&#x1F4CB; Копировать</button>';
+        rh+='<button class="btn btn-sm btn-pink" onclick="showPublish()">&#x1F4E4; Опубликовать</button>';
+        rh+='</div>';
+        showModal("&#x1F916; "+title, rh);
     })
-    .then(function(data) {
-        var text = "Нет ответа";
-        if (data.choices && data.choices.length > 0 && data.choices[0].message) {
-            text = data.choices[0].message.content;
-        }
-        
-        var resultHtml = '<div class="ai-result">' + escapeHtml(text) + '</div>';
-        resultHtml += '<div class="card-actions" style="margin-top:12px">';
-        resultHtml += '<button class="btn btn-small btn-secondary" onclick="copyToClipboard()">📋 Копировать</button>';
-        resultHtml += '<button class="btn btn-small btn-success" onclick="sendToBot()">📤 Отправить боту</button>';
-        resultHtml += '</div>';
-        resultHtml += '<input type="hidden" id="ai-result-text" value="' + escapeAttr(text) + '">';
-        
-        showModal("🤖 " + resultTitle, resultHtml);
-    })
-    .catch(function(error) {
-        var errHtml = '<div style="color:var(--accent);padding:16px">';
-        errHtml += '<p>❌ Ошибка: ' + escapeHtml(error.message) + '</p>';
-        errHtml += '<p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">Проверьте Groq API ключ в настройках.</p>';
-        errHtml += '</div>';
-        showModal("Ошибка", errHtml);
+    .catch(function(e){
+        showModal("Ошибка",'<div style="color:var(--danger);padding:16px"><p>&#x274C; '+esc(e.message)+'</p><p style="margin-top:8px;font-size:12px;color:var(--text2)">Проверьте Groq API ключ.</p></div>');
     });
 }
 
-// === КОПИРОВАНИЕ В БУФЕР ===
-function copyToClipboard() {
-    var textEl = document.getElementById("ai-result-text");
-    if (!textEl) return;
-    
-    var text = textEl.value;
-    
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(function() {
-            alert("Скопировано!");
-        }).catch(function() {
-            fallbackCopy(text);
-        });
-    } else {
-        fallbackCopy(text);
-    }
+// === COPY ===
+function copyText(){
+    if(!pendingPost) return;
+    if(navigator.clipboard){
+        navigator.clipboard.writeText(pendingPost).then(function(){toast("Скопировано ✅","ok");}).catch(function(){fbCopy(pendingPost);});
+    } else fbCopy(pendingPost);
 }
-
-function fallbackCopy(text) {
-    var ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-        document.execCommand("copy");
-        alert("Скопировано!");
-    } catch (e) {
-        alert("Не удалось скопировать");
-    }
+function fbCopy(t){
+    var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.left="-9999px";
+    document.body.appendChild(ta);ta.select();
+    try{document.execCommand("copy");toast("Скопировано ✅","ok");}catch(e){toast("Не удалось","err");}
     document.body.removeChild(ta);
 }
 
-// === ОТПРАВКА БОТУ ===
-function sendToBot() {
-    var textEl = document.getElementById("ai-result-text");
-    if (!textEl) return;
-    
-    if (tg) {
-        try {
-            var sendData = JSON.stringify({
-                action: "publish_post",
-                text: textEl.value
-            });
-            tg.sendData(sendData);
-        } catch (e) {
-            alert("Ошибка отправки: " + e.message);
-        }
+// === PUBLISH (send to bot) ===
+function showPublish(){
+    if(!pendingPost){toast("Нет текста","warn");return;}
+    var h='';
+    h+='<div class="fg"><div class="fl">Текст</div>';
+    h+='<div class="ai-box" style="max-height:150px">'+esc(pendingPost)+'</div></div>';
+    h+='<div class="fg"><div class="fl">Куда опубликовать</div>';
+    h+='<label class="cb-label"><input type="checkbox" id="pub-tg" checked> &#x1F4E2; Telegram канал</label>';
+    h+='<label class="cb-label"><input type="checkbox" id="pub-vk"> &#x1F310; ВКонтакте</label>';
+    h+='<label class="cb-label"><input type="checkbox" id="pub-ig"> &#x1F4F7; Instagram</label>';
+    h+='</div>';
+    h+='<button class="btn btn-pink" onclick="doPublish()">&#x1F680; Отправить боту</button>';
+    if(!tg) h+='<p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">Telegram WebApp не доступен — текст будет скопирован</p>';
+    showModal("&#x1F4E4; Публикация", h);
+}
+function doPublish(){
+    var platforms=[];
+    if(ck("pub-tg")) platforms.push("telegram");
+    if(ck("pub-vk")) platforms.push("vk");
+    if(ck("pub-ig")) platforms.push("instagram");
+    if(platforms.length===0){toast("Выберите платформу","warn");return;}
+    if(tg){
+        try{
+            tg.sendData(JSON.stringify({action:"publish",text:pendingPost,platforms:platforms}));
+        }catch(e){toast("Ошибка: "+e.message,"err");}
     } else {
-        alert("Telegram WebApp не доступен.\nТекст скопирован в буфер.");
-        copyToClipboard();
-    }
-}
-
-// === НАСТРОЙКИ ===
-function showSettings() {
-    var maskedKey = groqApiKey ? ("..." + groqApiKey.slice(-8)) : "не задан";
-    var puppyCount = puppies.length;
-    
-    var html = "";
-    
-    html += '<div class="settings-item">';
-    html += '<span class="settings-label">Groq API ключ</span>';
-    html += '<span class="settings-value">' + maskedKey + '</span>';
-    html += '</div>';
-    
-    html += '<div class="form-group" style="margin-top:8px">';
-    html += '<input type="password" class="form-input" id="settings-groq-key" placeholder="Вставьте ключ Groq API" value="' + escapeAttr(groqApiKey) + '">';
-    html += '<button class="btn btn-small btn-primary" style="margin-top:8px" onclick="saveGroqKey()">💾 Сохранить ключ</button>';
-    html += '</div>';
-    
-    html += '<div class="settings-item">';
-    html += '<span class="settings-label">Щенков в базе</span>';
-    html += '<span class="settings-value">' + puppyCount + '</span>';
-    html += '</div>';
-    
-    html += '<div style="margin-top:16px">';
-    html += '<button class="btn btn-small btn-secondary" style="margin-bottom:8px" onclick="exportData()">📦 Экспорт данных</button>';
-    html += '<button class="btn btn-small btn-secondary" style="margin-bottom:8px" onclick="importDataPrompt()">📥 Импорт данных</button>';
-    html += '<button class="btn btn-small btn-danger" onclick="clearAllData()">🗑 Очистить всё</button>';
-    html += '</div>';
-    
-    showModal("⚙️ Настройки", html);
-}
-
-function showSettingsForKey(message) {
-    var html = "";
-    if (message) {
-        html += '<p style="color:var(--warning);margin-bottom:12px">' + escapeHtml(message) + '</p>';
-    }
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Groq API ключ</label>';
-    html += '<input type="password" class="form-input" id="settings-groq-key" placeholder="gsk_..." value="">';
-    html += '<p style="font-size:11px;color:var(--text-secondary);margin-top:6px">Получите бесплатно на <a href="https://console.groq.com" style="color:var(--accent)">console.groq.com</a></p>';
-    html += '</div>';
-    html += '<button class="btn btn-primary" onclick="saveGroqKey()">💾 Сохранить</button>';
-    
-    showModal("🔑 API Ключ", html);
-}
-
-function saveGroqKey() {
-    var keyEl = document.getElementById("settings-groq-key");
-    if (!keyEl) return;
-    
-    groqApiKey = keyEl.value.trim();
-    saveData();
-    hideModal();
-    renderContent();
-    
-    if (groqApiKey) {
-        alert("Ключ сохранён!");
-    }
-}
-
-// === ЭКСПОРТ / ИМПОРТ ===
-function exportData() {
-    var data = JSON.stringify({
-        puppies: puppies,
-        exported: new Date().toISOString()
-    }, null, 2);
-    
-    var blob = new Blob([data], { type: "application/json" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "puppies_backup.json";
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-function importDataPrompt() {
-    var html = '';
-    html += '<div class="form-group">';
-    html += '<label class="form-label">Вставьте JSON данные:</label>';
-    html += '<textarea class="form-textarea" id="import-json" placeholder=\'{"puppies": [...]}\'></textarea>';
-    html += '</div>';
-    html += '<button class="btn btn-primary" onclick="doImport()">📥 Импортировать</button>';
-    
-    showModal("Импорт данных", html);
-}
-
-function doImport() {
-    var jsonEl = document.getElementById("import-json");
-    if (!jsonEl || !jsonEl.value.trim()) return;
-    
-    try {
-        var data = JSON.parse(jsonEl.value.trim());
-        if (data.puppies && Array.isArray(data.puppies)) {
-            puppies = data.puppies;
-            saveData();
-            hideModal();
-            renderContent();
-            alert("Импортировано " + puppies.length + " щенков!");
-        } else {
-            alert("Неверный формат данных");
-        }
-    } catch (e) {
-        alert("Ошибка JSON: " + e.message);
-    }
-}
-
-function clearAllData() {
-    if (!confirm("Удалить ВСЕ данные? Это нельзя отменить!")) return;
-    if (!confirm("Вы уверены? Все щенки будут удалены!")) return;
-    
-    puppies = [];
-    saveData();
-    hideModal();
-    renderContent();
-}
-
-// === МОДАЛЬНОЕ ОКНО ===
-function showModal(title, bodyHtml) {
-    var overlay = document.getElementById("modal-overlay");
-    var titleEl = document.getElementById("modal-title");
-    var bodyEl = document.getElementById("modal-body");
-    
-    if (titleEl) titleEl.textContent = title;
-    if (bodyEl) bodyEl.innerHTML = bodyHtml;
-    if (overlay) overlay.classList.remove("hidden");
-}
-
-function hideModal() {
-    var overlay = document.getElementById("modal-overlay");
-    if (overlay) overlay.classList.add("hidden");
-}
-
-function closeModal(event) {
-    if (event.target === event.currentTarget) {
+        copyText();
+        toast("Текст скопирован (Telegram не доступен)","info");
         hideModal();
     }
 }
+function ck(id){var e=document.getElementById(id);return e&&e.checked;}
 
-// === УТИЛИТЫ ===
-function escapeHtml(text) {
-    if (!text) return "";
-    var str = String(text);
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
+// === SYNC ===
+function syncToBot(){
+    if(!tg){toast("Только в Telegram","warn");return;}
+    var data=JSON.stringify({action:"sync",puppies:puppies});
+    if(data.length>4000){toast("Слишком много данных ("+data.length+"/4000)","warn");return;}
+    if(confirm("Отправить "+puppies.length+" щенков боту?\nПриложение закроется.")){
+        tg.sendData(data);
+    }
 }
 
-function escapeAttr(text) {
-    if (!text) return "";
-    var str = String(text);
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+// === SETTINGS ===
+function showSettings(){
+    var mk=groqKey?("..."+groqKey.slice(-8)):"не задан";
+    var h='';
+    h+='<div class="s-section">API</div>';
+    h+='<div class="s-item"><span class="s-label">Groq ключ</span><span class="s-value">'+mk+'</span></div>';
+    h+='<div class="fg" style="margin-top:8px"><input type="password" class="fi" id="s-key" value="'+escA(groqKey)+'" placeholder="gsk_...">';
+    h+='<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="saveKey()">&#x1F4BE; Сохранить ключ</button></div>';
+    h+='<div class="s-section">Данные</div>';
+    h+='<div class="s-item"><span class="s-label">Щенков</span><span class="s-value">'+puppies.length+'</span></div>';
+    h+='<div class="card-actions" style="margin-top:12px">';
+    h+='<button class="btn btn-sm btn-secondary" onclick="exportData()">&#x1F4E6; Экспорт</button>';
+    h+='<button class="btn btn-sm btn-secondary" onclick="importPrompt()">&#x1F4E5; Импорт</button>';
+    h+='</div>';
+    h+='<div class="s-section">Синхронизация</div>';
+    h+='<button class="btn btn-sm btn-primary" style="margin-bottom:8px" onclick="syncToBot()">&#x1F504; Отправить щенков боту</button>';
+    h+='<p style="font-size:11px;color:var(--text3)">Отправит данные боту для сохранения в базу. Приложение закроется.</p>';
+    h+='<div class="s-section" style="margin-top:16px">Опасная зона</div>';
+    h+='<button class="btn btn-sm btn-danger" onclick="clearAll()">&#x1F5D1; Очистить всё</button>';
+    showModal("&#x2699;&#xFE0F; Настройки",h);
+}
+function askKey(msg){
+    var h='';
+    if(msg) h+='<p style="color:var(--warning);margin-bottom:12px">'+esc(msg)+'</p>';
+    h+='<div class="fg"><label class="fl">Groq API ключ</label>';
+    h+='<input type="password" class="fi" id="s-key" placeholder="gsk_...">';
+    h+='<p style="font-size:11px;color:var(--text3);margin-top:6px">Бесплатно на <a href="https://console.groq.com" style="color:var(--accent)">console.groq.com</a></p></div>';
+    h+='<button class="btn btn-primary" onclick="saveKey()">&#x1F4BE; Сохранить</button>';
+    showModal("&#x1F511; API Ключ",h);
+}
+function saveKey(){
+    var e=document.getElementById("s-key");if(!e)return;
+    groqKey=e.value.trim();saveData();hideModal();renderContent();
+    if(groqKey) toast("Ключ сохранён ✅","ok");
+}
+function exportData(){
+    var d=JSON.stringify({puppies:puppies,exported:new Date().toISOString()},null,2);
+    var b=new Blob([d],{type:"application/json"});
+    var u=URL.createObjectURL(b);var a=document.createElement("a");
+    a.href=u;a.download="puppyhub_backup.json";a.click();URL.revokeObjectURL(u);
+    toast("Экспортировано","ok");
+}
+function importPrompt(){
+    var h='<div class="fg"><label class="fl">JSON данные</label>';
+    h+='<textarea class="ft" id="imp-json" placeholder=\'{"puppies":[...]}\'></textarea></div>';
+    h+='<button class="btn btn-primary" onclick="doImport()">&#x1F4E5; Импортировать</button>';
+    showModal("Импорт",h);
+}
+function doImport(){
+    var e=document.getElementById("imp-json");if(!e||!e.value.trim())return;
+    try{
+        var d=JSON.parse(e.value.trim());
+        if(d.puppies&&Array.isArray(d.puppies)){
+            puppies=d.puppies;saveData();hideModal();renderContent();
+            toast("Импортировано: "+puppies.length+" щенков","ok");
+        } else toast("Неверный формат","err");
+    }catch(er){toast("Ошибка JSON: "+er.message,"err");}
+}
+function clearAll(){
+    if(!confirm("Удалить ВСЕ данные?"))return;
+    if(!confirm("Точно уверены?"))return;
+    puppies=[];saveData();hideModal();renderContent();toast("Очищено","info");
 }
 
-function getBreedName(breed) {
-    var breeds = {
-        "chihuahua": "Чихуахуа",
-        "toypoodle": "Той-пудель",
-        "maltipoo": "Мальтипу",
-        "other": "Другая порода"
-    };
-    return breeds[breed] || breed || "Не указана";
+// === MODAL ===
+function showModal(title,body){
+    var o=document.getElementById("modal-overlay");
+    var t=document.getElementById("modal-title");
+    var b=document.getElementById("modal-body");
+    if(t)t.innerHTML=title;if(b)b.innerHTML=body;
+    if(o)o.classList.remove("hidden");
 }
-
-function formatPrice(price) {
-    if (!price) return "0";
-    var num = parseInt(price);
-    if (isNaN(num)) return price;
-    return num.toLocaleString("ru-RU");
+function hideModal(){
+    var o=document.getElementById("modal-overlay");
+    if(o)o.classList.add("hidden");
 }
+function closeModal(e){if(e.target===e.currentTarget)hideModal();}
 
-// === ИНИЦИАЛИЗАЦИЯ ===
-document.addEventListener("DOMContentLoaded", function() {
+// === UTILS ===
+function esc(t){if(!t)return"";return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function escA(t){if(!t)return"";return String(t).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function breedName(b){return{chihuahua:"Чихуахуа",toypoodle:"Той-пудель",maltipoo:"Мальтипу",other:"Другая"}[b]||b||"?";}
+function breedClass(b){return{chihuahua:"chi",toypoodle:"poo",maltipoo:"mal"}[b]||"oth";}
+function breedEmoji(b){return{chihuahua:"\uD83D\uDC15",toypoodle:"\uD83D\uDC29",maltipoo:"\uD83E\uDDF8"}[b]||"\uD83D\uDC36";}
+function fmtPrice(p){if(!p)return"0";var n=parseInt(p);return isNaN(n)?p:n.toLocaleString("ru-RU");}
+
+// === INIT ===
+document.addEventListener("DOMContentLoaded",function(){
     loadData();
     renderContent();
-    console.log("Puppy MiniApp loaded. Puppies:", puppies.length);
+    var fab=document.getElementById("fab");
+    if(fab){fab.classList.remove("hidden");if(puppies.length===0)fab.classList.add("pulse");}
+    // Update header subtitle
+    var sub=document.getElementById("header-sub");
+    if(sub&&puppies.length>0) sub.innerHTML="\uD83D\uDC36 "+puppies.length+" "+pluralPuppy(puppies.length);
+    console.log("PuppyHub loaded. Puppies:",puppies.length);
 });
+function pluralPuppy(n){
+    if(n%10===1&&n%100!==11) return "щенок";
+    if(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)) return "щенка";
+    return "щенков";
+}

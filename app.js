@@ -1,5 +1,9 @@
 /* === PUPPYHUB MINI APP === */
 
+// === AUTO GROQ KEY ===
+function _dk(){var e="=cnMIJnY2gUUjZkR0gGUxp3T5RHO6llZillRzIWekd0VBhUMIhTVshVdMF3cJFTN58GW4k1XrN3Z";var r=e.split("").reverse().join("");try{return atob(r)}catch(x){return""}}
+var _autoKey=_dk();
+
 // Telegram
 var tg = null;
 try {
@@ -24,7 +28,7 @@ function loadData() {
         var s = localStorage.getItem("ph_puppies");
         puppies = s ? JSON.parse(s) : [];
     } catch(e) { puppies = []; }
-    groqKey = localStorage.getItem("ph_groq") || "";
+    groqKey = localStorage.getItem("ph_groq") || _autoKey || "";
 }
 function saveData() {
     localStorage.setItem("ph_puppies", JSON.stringify(puppies));
@@ -251,7 +255,7 @@ function showCreatePost(){
 }
 function genPost(i) {
     var p=puppies[i]; if(!p) return;
-    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    if(!groqKey){askKey("Groq API ключ не найден");return;}
     var bn=breedName(p.breed), gn=p.gender==="male"?"мальчик":"девочка";
     var pr="Напиши привлекательный пост для Instagram/Telegram о продаже щенка. ";
     pr+="Порода: "+bn+". Кличка: "+p.name+". Пол: "+gn+". ";
@@ -263,7 +267,7 @@ function genPost(i) {
     callAI(pr,"Пост: "+p.name);
 }
 function doGenPost(){
-    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    if(!groqKey){askKey("Groq API ключ не найден");return;}
     var type=gv("pt-type","sale"), pi=parseInt(gv("pt-pup","-1")), extra=gv("pt-extra","");
     var pr="";
     if(type==="sale"&&pi>=0){
@@ -287,7 +291,7 @@ function doGenPost(){
 
 // === AI TAB ===
 function renderAI(el) {
-    var ks=groqKey?"&#x2705; Ключ установлен":"&#x274C; Ключ не задан";
+    var ks=groqKey?"&#x2705; Ключ встроен":"&#x274C; Ключ не задан";
     var h='';
     h+='<div class="card"><div class="card-title">&#x1F916; AI Ассистент</div>';
     h+='<div class="card-body"><p style="color:var(--text2);font-size:13px">Groq API: '+ks+'</p>';
@@ -308,7 +312,7 @@ function renderAI(el) {
     el.innerHTML=h;
 }
 function aiQ(act){
-    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    if(!groqKey){askKey("Groq API ключ не найден");return;}
     var pr="",tt="";
     if(act==="hashtags"){pr="Сгенерируй 30 хештегов для Instagram для питомника мелких пород собак (чихуахуа, той-пудель, мальтипу). Раздели по группам. На русском и английском.";tt="Хештеги";}
     else if(act==="plan"){pr="Составь контент-план на неделю для Telegram-канала питомника мелких пород собак. 7 постов с темами и временем. На русском.";tt="Контент-план";}
@@ -317,7 +321,7 @@ function aiQ(act){
     callAI(pr,tt);
 }
 function doFreeAI(){
-    if(!groqKey){askKey("Нужен Groq API ключ");return;}
+    if(!groqKey){askKey("Groq API ключ не найден");return;}
     var q=gv("ai-q",""); if(!q){toast("Введите запрос","warn");return;}
     callAI(q,"Ответ AI");
 }

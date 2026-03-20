@@ -21,6 +21,8 @@ var currentTab = "puppies";
 var puppies = [];
 var groqKey = "";
 var pendingPost = "";
+var lastPrompt = "";
+var lastTitle = "";
 
 // === DATA ===
 function loadData() {
@@ -328,6 +330,8 @@ function doFreeAI(){
 
 // === GROQ API ===
 function callAI(prompt, title) {
+    lastPrompt = prompt;
+    lastTitle = title;
     showModal("&#x1F916; "+title, '<div class="loader"><div class="spinner"></div><p style="margin-top:12px;color:var(--text2)">Генерирую...</p></div>');
     fetch("https://api.groq.com/openai/v1/chat/completions",{
         method:"POST",
@@ -348,6 +352,7 @@ function callAI(prompt, title) {
         var rh='<div class="ai-box">'+esc(text)+'</div>';
         rh+='<div class="ai-actions">';
         rh+='<button class="btn btn-sm btn-secondary" onclick="copyText()">&#x1F4CB; Копировать</button>';
+        rh+='<button class="btn btn-sm btn-warning" onclick="regenAI()">&#x1F504; Перегенерировать</button>';
         rh+='<button class="btn btn-sm btn-pink" onclick="showPublish()">&#x1F4E4; Опубликовать</button>';
         rh+='</div>';
         showModal("&#x1F916; "+title, rh);
@@ -357,6 +362,12 @@ function callAI(prompt, title) {
     });
 }
 
+
+// === ПЕРЕГЕНЕРАЦИЯ ===
+function regenAI() {
+    if (!lastPrompt) { toast("Нечего перегенерировать", "warn"); return; }
+    callAI(lastPrompt, lastTitle);
+}
 // === COPY ===
 function copyText(){
     if(!pendingPost) return;

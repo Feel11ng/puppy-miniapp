@@ -2,46 +2,207 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>PuppyHub</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a1a">
+    <title>PuppyHub Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
+    <!-- Toast Notifications -->
     <div id="toast-container"></div>
+    
+    <!-- Pull to Refresh Indicator -->
+    <div id="ptr-indicator">
+        <div class="ptr-spinner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v4m0 12v4m-6-6H2m20 0h-4m-2-6l2-2M6 16l-2 2m14-2l2 2M6 8L4 6"/>
+            </svg>
+        </div>
+    </div>
+    
+    <!-- Main App -->
     <div id="app">
-        <div class="header">
-            <div class="header-left">
-                <span class="logo">&#x1F43E;</span>
-                <div>
-                    <h1 class="header-title">PuppyHub</h1>
-                    <p class="header-sub" id="header-sub">&#x1F436; Управление питомником</p>
+        <!-- Header -->
+        <header class="header">
+            <div class="header-bg"></div>
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="logo-wrapper">
+                        <span class="logo">&#x1F43E;</span>
+                        <div class="logo-glow"></div>
+                    </div>
+                    <div class="header-text">
+                        <h1 class="header-title">PuppyHub<span class="pro-badge">PRO</span></h1>
+                        <p class="header-sub" id="header-sub">&#x1F436; &#x41D;&#x435;&#x43D;&#x435;&#x43D;&#x438;&#x435; &#x43F;&#x438;&#x442;&#x43E;&#x440;&#x43D;&#x43E;&#x43C;</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button type="button" class="btn-icon" id="btn-search" aria-label="&#x41F;&#x43E;&#x438;&#x441;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                        </svg>
+                    </button>
+                    <button type="button" class="btn-icon" id="btn-theme" aria-label="&#x542;&#x435;&#x43C;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="theme-icon">
+                            <circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                        </svg>
+                    </button>
+                    <button type="button" class="btn-icon" id="btn-settings" aria-label="&#x41D;&#x435;&#x43D;&#x438;&#x441;&#x43A;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
-            <button type="button" class="btn-icon" id="btn-settings" aria-label="Настройки">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </header>
+
+        <!-- Search Bar (Collapsible) -->
+        <div id="search-bar" class="search-bar hidden">
+            <div class="search-input-wrapper">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input type="text" id="search-input" class="search-input" placeholder="&#x41F;&#x43E;&#x438;&#x441; &#x420; &#x438;&#x43C;&#x435;&#x43D;&#x435;, &#x43F;&#x43E;&#x440;&#x430;&#x44F;, &#x43E;&#x441;&#x43A;&#x43C;&#x435;&#x43D;&#x435;..." autocomplete="off">
+                <button type="button" class="search-clear hidden" id="search-clear">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="filter-chips" id="filter-chips">
+                <button class="chip active" data-filter="all">&#x41D;&#x435;&#x43D;&#x435;</button>
+                <button class="chip" data-filter="available">&#x41D;&#x435;&#x43D;&#x435;&#x43F;&#x435;&#x43D;&#x438;&#x435;</button>
+                <button class="chip" data-filter="reserved">&#x42D;&#x430;&#x435;&#x43D;</button>
+                <button class="chip" data-filter="sold">&#x41F;&#x430;&#x43E;&#x43C;&#x435;&#x43D;&#x438;&#x435;</button>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions" id="quick-actions">
+            <button type="button" class="quick-btn" data-action="stats">
+                <div class="quick-icon">&#x1F4C8;</div>
+                <span>&#x41D;&#x435;&#x442;&#x438;&#x441;&#x442;&#x43A;</span>
+            </button>
+            <button type="button" class="quick-btn" data-action="ai">
+                <div class="quick-icon">&#x1F916;</div>
+                <span>AI</span>
+            </button>
+            <button type="button" class="quick-btn" data-action="calendar">
+                <div class="quick-icon">&#x1F4C5;</div>
+                <span>&#x41F;&#x430;&#x43D;</span>
+            </button>
+            <button type="button" class="quick-btn" data-action="sync">
+                <div class="quick-icon">&#x1F504;</div>
+                <span>&#x441;&#x43D;&#x43D;&#x435;&#x43D;&#x438;&#x441;&#x43A;&#x438;&#x435;</span>
             </button>
         </div>
-        <div class="tabs" id="tabs-bar">
-            <button type="button" class="tab active" data-tab="puppies">&#x1F436; &#1065;&#1077;&#1085;&#1082;&#1080;</button>
-            <button type="button" class="tab" data-tab="posts">&#x1F4DD; &#1055;&#1086;&#1089;&#1090;&#1099;</button>
-            <button type="button" class="tab" data-tab="ai">&#x1F916; AI</button>
-        </div>
-        <div id="content"></div>
+
+        <!-- Tabs Navigation -->
+        <nav class="tabs-wrapper">
+            <div class="tabs" id="tabs-bar">
+                <button type="button" class="tab active" data-tab="puppies">
+                    <span class="tab-icon">&#x1F436;</span>
+                    <span class="tab-text">&#x41D;&#x435;&#x43D;&#x435;</span>
+                    <span class="tab-badge" id="puppies-count">0</span>
+                </button>
+                <button type="button" class="tab" data-tab="posts">
+                    <span class="tab-icon">&#x1F4DD;</span>
+                    <span class="tab-text">&#x41F;&#x43E;&#x441;&#x442;</span>
+                </button>
+                <button type="button" class="tab" data-tab="analytics">
+                    <span class="tab-icon">&#x1F4C9;</span>
+                    <span class="tab-text">&#x41D;&#x43D;&#x43D;&#x43B;&#x44F;&#x43A;</span>
+                </button>
+                <button type="button" class="tab" data-tab="ai">
+                    <span class="tab-icon">&#x1F916;</span>
+                    <span class="tab-text">AI</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Content Area -->
+        <main id="content" class="content"></main>
+        
+        <!-- Bottom Spacer for FAB -->
+        <div class="bottom-spacer"></div>
     </div>
+
+    <!-- Floating Action Button -->
     <button type="button" id="fab" class="fab hidden">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <div class="fab-bg"></div>
+        <div class="fab-content">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+        </div>
+        <div class="fab-ripple"></div>
     </button>
+
+    <!-- Expanded FAB Menu -->
+    <div id="fab-menu" class="fab-menu hidden">
+        <button type="button" class="fab-menu-item" data-action="add-puppy">
+            <span class="fab-menu-icon">&#x1F436;</span>
+            <span class="fab-menu-text">&#x41D;&#x43E;&#x43B;&#x435;&#x43D;&#x435; &#x41D;&#x435;&#x43D;&#x435;</span>
+        </button>
+        <button type="button" class="fab-menu-item" data-action="create-post">
+            <span class="fab-menu-icon">&#x1F4DD;</span>
+            <span class="fab-menu-text">&#x41D;&#x43E;&#x43B;&#x435;&#x43D;&#x435; &#x41F;&#x43E;&#x441;&#x442;</span>
+        </button>
+        <button type="button" class="fab-menu-item" data-action="ai-generate">
+            <span class="fab-menu-icon">&#x1F916;</span>
+            <span class="fab-menu-text">&#x41D;&#x43E;&#x43B;&#x435;&#x43D;&#x435; &#x442;&#x435;&#x43A;&#x442;</span>
+        </button>
+    </div>
+
+    <!-- Modal Overlay -->
     <div id="modal-overlay" class="modal-overlay hidden">
+        <div class="modal-backdrop"></div>
         <div class="modal" id="modal-panel">
-            <div class="modal-handle"></div>
             <div class="modal-header">
-                <h2 id="modal-title"></h2>
-                <button type="button" class="btn-close" id="modal-close" aria-label="Закрыть">&times;</button>
+                <div class="modal-handle"></div>
+                <div class="modal-title-row">
+                    <h2 id="modal-title"></h2>
+                    <button type="button" class="btn-close" id="modal-close" aria-label="&#x417;&#x430;&#x440;&#x43A;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div id="modal-body" class="modal-body"></div>
+            <div id="modal-footer" class="modal-footer hidden"></div>
         </div>
     </div>
+
+    <!-- Full Screen Gallery -->
+    <div id="gallery-overlay" class="gallery-overlay hidden">
+        <button type="button" class="gallery-close" id="gallery-close">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+        <div class="gallery-container">
+            <div id="gallery-slides" class="gallery-slides"></div>
+        </div>
+        <div class="gallery-dots" id="gallery-dots"></div>
+    </div>
+
+    <!-- Bottom Sheet for Quick Actions -->
+    <div id="bottom-sheet" class="bottom-sheet hidden">
+        <div class="bottom-sheet-backdrop"></div>
+        <div class="bottom-sheet-panel">
+            <div class="bottom-sheet-handle"></div>
+            <div class="bottom-sheet-content" id="bottom-sheet-content"></div>
+        </div>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

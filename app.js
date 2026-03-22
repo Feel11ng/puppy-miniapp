@@ -1,4 +1,1031 @@
-/* === PUPPYHUB MINI APP v3 === */
+/* === PUPPYHUB PRO v4 - MODERN MINI APP === */
+(function(){
+    'use strict';
+
+    // === CONFIG ===
+    const APP_VERSION = '4.0.0';
+    const STORAGE_KEY = 'puppyhub_pro_v4';
+    const GROQ_KEY_HASH = [77,89,65,117,115,18,114,69,19,31,27,99,89,91,102,95,114,70,127,18,98,27,98,107,125,109,78,83,72,25,108,115,72,76,115,80,18,94,83,101,80,91,122,66,30,108,108,73,123,98,28,72,88,98,24,93];
+    
+    // === STATE ===
+    let state = {
+        currentTab: 'puppies',
+        puppies: [],
+        posts: [],
+        settings: {
+            groqKey: '',
+            theme: 'dark',
+            notifications: true
+        },
+        ui: {
+            searchQuery: '',
+            filterStatus: 'all',
+            fabExpanded: false,
+            modalOpen: false
+        }
+    };
+
+    // === TELEGRAM WEBAPP ===
+    let tg = null;
+    try {
+        if (window.Telegram && window.Telegram.WebApp) {
+            tg = window.Telegram.WebApp;
+            tg.expand();
+            tg.ready();
+            tg.setHeaderColor('#0a0a1a');
+            tg.setBackgroundColor('#0a0a1a');
+        }
+    } catch (e) { console.log('Telegram WebApp not available'); }
+
+    // === UTILITY FUNCTIONS ===
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+    
+    const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+    
+    const escapeHtml = (text) => {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+
+    const formatPrice = (price) => {
+        if (!price) return '0';
+        const num = parseInt(price);
+        return isNaN(num) ? price : num.toLocaleString('ru-RU');
+    };
+
+    const pluralize = (n, forms) => {
+        const idx = (n % 10 === 1 && n % 100 !== 11) ? 0 : 
+                    (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 1 : 2;
+        return forms[idx];
+    };
+
+    const debounce = (fn, delay) => {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => fn(...args), delay);
+        };
+    };
+
+    // === BREED UTILS ===
+    const breeds = {
+        chihuahua: { name: 'Чихуахуа', emoji: '🐕', class: 'chi', color: '#f59e0b' },
+        toypoodle: { name: 'Той-пудель', emoji: '🐩', class: 'poo', color: '#ec4899' },
+        maltipoo: { name: 'Мальтипу', emoji: '🐻', class: 'mal', color: '#a855f7' },
+        other: { name: 'Другая', emoji: '🐾', class: 'oth', color: '#3b82f6' }
+    };
+
+    const getBreed = (breed) => breeds[breed] || breeds.other;
+
+    // === STORAGE ===
+    const saveData = () => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            puppies: state.puppies,
+            posts: state.posts,
+            settings: state.settings
+        }));
+    };
+
+    const loadData = () => {
+        try {
+            const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+            if (data) {
+                state.puppies = data.puppies || [];
+                state.posts = data.posts || [];
+                state.settings = { ...state.settings, ...(data.settings || {}) };
+            }
+        } catch (e) { console.error('Load error:', e); }
+        
+        // Default GROQ key
+        if (!state.settings.groqKey) {
+            state.settings.groqKey = GROQ_KEY_HASH.map(c => String.fromCharCode(c ^ 42)).join('');
+        }
+    };
+
+    // === TOAST NOTIFICATIONS ===
+    const toast = (message, type = 'info', duration = 3000) => {
+        const container = $('#toast-container');
+        if (!container) return;
+        
+        const el = document.createElement('div');
+        el.className = `toast toast-${type}`;
+        el.textContent = message;
+        
+        container.appendChild(el);
+        
+        setTimeout(() => {
+            el.classList.add('toast-hide');
+            setTimeout(() => el.remove(), 300);
+        }, duration);
+    };
+
+    // === THEME ===
+    const toggleTheme = () => {
+        state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', state.settings.theme);
+        saveData();
+        toast(state.settings.theme === 'dark' ? '🌙 Тёмная тема' : '☀️ Светлая тема', 'info');
+    };
+
+    const initTheme = () => {
+        document.documentElement.setAttribute('data-theme', state.settings.theme);
+    };
+
+    // === SEARCH & FILTER ===
+    const filterPuppies = () => {
+        let filtered = [...state.puppies];
+        
+        if (state.ui.filterStatus !== 'all') {
+            filtered = filtered.filter(p => p.status === state.ui.filterStatus);
+        }
+        
+        if (state.ui.searchQuery) {
+            const q = state.ui.searchQuery.toLowerCase();
+            filtered = filtered.filter(p => 
+                (p.name && p.name.toLowerCase().includes(q)) ||
+                (p.breed && getBreed(p.breed).name.toLowerCase().includes(q)) ||
+                (p.color && p.color.toLowerCase().includes(q)) ||
+                (p.description && p.description.toLowerCase().includes(q))
+            );
+        }
+        
+        return filtered;
+    };
+
+    const updateSearch = debounce((query) => {
+        state.ui.searchQuery = query;
+        renderContent();
+    }, 200);
+
+    // === RENDER FUNCTIONS ===
+    const renderStats = () => {
+        const stats = {
+            available: state.puppies.filter(p => p.status === 'available').length,
+            reserved: state.puppies.filter(p => p.status === 'reserved').length,
+            sold: state.puppies.filter(p => p.status === 'sold').length
+        };
+
+        return `
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value success">${stats.available}</div>
+                    <div class="stat-label">Свободны</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value warning">${stats.reserved}</div>
+                    <div class="stat-label">Бронь</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value danger">${stats.sold}</div>
+                    <div class="stat-label">Проданы</div>
+                </div>
+            </div>
+        `;
+    };
+
+    const renderPuppyCard = (puppy, index) => {
+        const breed = getBreed(puppy.breed);
+        const gender = puppy.gender === 'male' ? '♂️' : '♀️';
+        const statusMap = {
+            available: { text: 'Свободен', class: 'badge-ok' },
+            reserved: { text: 'Бронь', class: 'badge-res' },
+            sold: { text: 'Продан', class: 'badge-sold' }
+        };
+        const status = statusMap[puppy.status] || statusMap.available;
+
+        return `
+            <div class="card card-${breed.class}" data-puppy-id="${puppy.id}" data-index="${index}">
+                <div class="card-row">
+                    <div class="avatar avatar-${breed.class}">${breed.emoji}</div>
+                    <div class="card-info">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">${escapeHtml(puppy.name)} ${gender}</div>
+                                <div class="card-subtitle">${breed.name}</div>
+                            </div>
+                            <span class="badge ${status.class}">${status.text}</span>
+                        </div>
+                        <div class="card-meta">
+                            ${puppy.age ? `<span>📅 ${escapeHtml(puppy.age)}</span>` : ''}
+                            ${puppy.color ? `<span>🎨 ${escapeHtml(puppy.color)}</span>` : ''}
+                            ${puppy.price ? `<span class="price">${formatPrice(puppy.price)} ₽</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    const renderPuppies = () => {
+        const container = $('#content');
+        const filtered = filterPuppies();
+        
+        const badge = $('#puppies-count');
+        if (badge) badge.textContent = filtered.length;
+
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🐕</div>
+                    <div class="empty-title">Нет щенков</div>
+                    <div class="empty-text">${state.ui.searchQuery ? 'Попробуйте изменить поиск' : 'Нажмите + чтобы добавить первого щенка!'}</div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = renderStats();
+        html += filtered.map((p, i) => renderPuppyCard(p, i)).join('');
+        container.innerHTML = html;
+    };
+
+    const renderPosts = () => {
+        const container = $('#content');
+        
+        let html = `
+            <button type="button" class="btn btn-primary mb-3" data-action="showCreatePost">
+                <span>✍️</span> Создать пост
+            </button>
+        `;
+
+        const available = state.puppies.filter(p => p.status === 'available');
+        
+        if (available.length > 0) {
+            html += `
+                <div class="card">
+                    <div class="card-title">⚡ Быстрый пост</div>
+                    <div class="card-body">
+                        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">Выберите щенка для AI-поста:</p>
+                        ${available.map((p, i) => `
+                            <button type="button" class="btn btn-sm btn-ghost mb-2" data-action="genPost" data-puppy-id="${p.id}">
+                                ${getBreed(p.breed).emoji} ${escapeHtml(p.name)}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (state.posts.length > 0) {
+            html += `<div class="card"><div class="card-title">📚 История постов</div>`;
+            html += state.posts.slice(0, 5).map(post => `
+                <div class="card-body" style="border-bottom:1px solid var(--card-border);padding:8px 0;">
+                    <div style="font-size:12px;color:var(--text-tertiary)">${new Date(post.date).toLocaleDateString()}</div>
+                    <div style="font-size:13px;margin-top:4px">${escapeHtml(post.title || 'Без названия')}</div>
+                </div>
+            `).join('');
+            html += `</div>`;
+        } else if (available.length === 0) {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-icon">📝</div>
+                    <div class="empty-title">Нет постов</div>
+                    <div class="empty-text">Добавьте щенков чтобы создавать посты</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    };
+
+    const renderAnalytics = () => {
+        const container = $('#content');
+        
+        const stats = {
+            total: state.puppies.length,
+            available: state.puppies.filter(p => p.status === 'available').length,
+            reserved: state.puppies.filter(p => p.status === 'reserved').length,
+            sold: state.puppies.filter(p => p.status === 'sold').length,
+            totalValue: state.puppies.reduce((sum, p) => sum + (parseInt(p.price) || 0), 0)
+        };
+
+        container.innerHTML = `
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">${stats.total}</div>
+                    <div class="stat-label">Всего щенков</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value success">${stats.available}</div>
+                    <div class="stat-label">В продаже</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${formatPrice(stats.totalValue)}</div>
+                    <div class="stat-label">Общая стоимость</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <div class="chart-title">Распределение по породам</div>
+                <canvas id="breedChart"></canvas>
+            </div>
+        `;
+
+        if (window.Chart) {
+            setTimeout(() => {
+                const breedCtx = $('#breedChart');
+                if (breedCtx) {
+                    const breedCounts = {};
+                    state.puppies.forEach(p => {
+                        breedCounts[p.breed] = (breedCounts[p.breed] || 0) + 1;
+                    });
+                    
+                    new Chart(breedCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(breedCounts).map(b => getBreed(b).name),
+                            datasets: [{
+                                data: Object.values(breedCounts),
+                                backgroundColor: Object.keys(breedCounts).map(b => getBreed(b).color)
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: { legend: { position: 'bottom' } }
+                        }
+                    });
+                }
+            }, 100);
+        }
+    };
+
+    const renderAI = () => {
+        const container = $('#content');
+        const hasKey = !!state.settings.groqKey;
+        
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-title">🤖 AI Ассистент</div>
+                <div class="card-body">
+                    <p style="color:var(--text-secondary);font-size:13px">
+                        ${hasKey ? '✅ Groq API: настроен' : '❌ Groq API: не настроен'}
+                    </p>
+                    ${!hasKey ? `
+                        <button type="button" class="btn btn-sm btn-primary mt-2" data-action="showSettings">
+                            🔑 Установить ключ
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">💬 Свободный запрос</div>
+                <div class="card-body mt-2">
+                    <textarea class="form-textarea" id="ai-query" placeholder="Задайте любой вопрос..."></textarea>
+                    <button type="button" class="btn btn-primary mt-3" data-action="doFreeAI">
+                        🚀 Отправить
+                    </button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">⚡ Быстрые действия</div>
+                <div class="card-footer" style="margin-top:8px">
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="aiQuick" data-prompt="hashtags">🏷️ Хештеги</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="aiQuick" data-prompt="plan">📅 План</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="aiQuick" data-prompt="tips">💡 Советы</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="aiQuick" data-prompt="names">📛 Имена</button>
+                </div>
+            </div>
+        `;
+    };
+
+    const renderContent = () => {
+        const map = {
+            puppies: renderPuppies,
+            posts: renderPosts,
+            analytics: renderAnalytics,
+            ai: renderAI
+        };
+        (map[state.currentTab] || renderPuppies)();
+    };
+
+    // === TABS ===
+    const switchTab = (tab) => {
+        state.currentTab = tab;
+        
+        $$('.tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.tab === tab);
+        });
+        
+        const fab = $('#fab');
+        if (fab) {
+            fab.classList.toggle('hidden', tab !== 'puppies');
+        }
+        
+        renderContent();
+    };
+
+    // === MODAL ===
+    const showModal = (title, content, footer = '') => {
+        const titleEl = $('#modal-title');
+        const bodyEl = $('#modal-body');
+        const footerEl = $('#modal-footer');
+        const overlay = $('#modal-overlay');
+        
+        if (titleEl) titleEl.innerHTML = title;
+        if (bodyEl) bodyEl.innerHTML = content;
+        if (footerEl) {
+            footerEl.innerHTML = footer;
+            footerEl.classList.toggle('hidden', !footer);
+        }
+        if (overlay) overlay.classList.remove('hidden');
+        
+        state.ui.modalOpen = true;
+    };
+
+    const hideModal = () => {
+        const overlay = $('#modal-overlay');
+        if (overlay) overlay.classList.add('hidden');
+        state.ui.modalOpen = false;
+    };
+
+    // === PUPPY FORM ===
+    const showPuppyForm = (puppy = null) => {
+        const isEdit = !!puppy;
+        const p = puppy || {};
+        
+        const content = `
+            <div class="form-group">
+                <label class="form-label">Кличка *</label>
+                <input type="text" class="form-input" id="puppy-name" value="${escapeHtml(p.name || '')}" placeholder="Имя щенка">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Порода</label>
+                <select class="form-select" id="puppy-breed">
+                    ${Object.entries(breeds).map(([key, b]) => `
+                        <option value="${key}" ${p.breed === key ? 'selected' : ''}>${b.name}</option>
+                    `).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Пол</label>
+                <select class="form-select" id="puppy-gender">
+                    <option value="female" ${p.gender !== 'male' ? 'selected' : ''}>Девочка ♀️</option>
+                    <option value="male" ${p.gender === 'male' ? 'selected' : ''}>Мальчик ♂️</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Возраст</label>
+                <input type="text" class="form-input" id="puppy-age" value="${escapeHtml(p.age || '')}" placeholder="3 месяца">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Окрас</label>
+                <input type="text" class="form-input" id="puppy-color" value="${escapeHtml(p.color || '')}" placeholder="Рыжий">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Цена (₽)</label>
+                <input type="number" class="form-input" id="puppy-price" value="${escapeHtml(p.price || '')}" placeholder="50000">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Статус</label>
+                <select class="form-select" id="puppy-status">
+                    <option value="available" ${p.status !== 'reserved' && p.status !== 'sold' ? 'selected' : ''}>Свободен</option>
+                    <option value="reserved" ${p.status === 'reserved' ? 'selected' : ''}>Забронирован</option>
+                    <option value="sold" ${p.status === 'sold' ? 'selected' : ''}>Продан</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Описание</label>
+                <textarea class="form-textarea" id="puppy-desc" placeholder="О щенке...">${escapeHtml(p.description || '')}</textarea>
+            </div>
+        `;
+        
+        const footer = `
+            <button type="button" class="btn btn-secondary" data-action="closeModal">Отмена</button>
+            <button type="button" class="btn btn-success" data-action="${isEdit ? 'updatePuppy' : 'createPuppy'}" data-puppy-id="${p.id || ''}">
+                💾 ${isEdit ? 'Обновить' : 'Сохранить'}
+            </button>
+        `;
+        
+        showModal(isEdit ? 'Редактировать щенка' : 'Новый щенок', content, footer);
+    };
+
+    const getFormValue = (id) => {
+        const el = $(`#${id}`);
+        return el ? el.value.trim() : '';
+    };
+
+    const savePuppy = (id = null) => {
+        const name = getFormValue('puppy-name');
+        if (!name) {
+            toast('Введите кличку!', 'warning');
+            return;
+        }
+        
+        const puppy = {
+            id: id || generateId(),
+            name,
+            breed: getFormValue('puppy-breed') || 'other',
+            gender: getFormValue('puppy-gender') || 'female',
+            age: getFormValue('puppy-age'),
+            color: getFormValue('puppy-color'),
+            price: getFormValue('puppy-price'),
+            status: getFormValue('puppy-status') || 'available',
+            description: getFormValue('puppy-desc'),
+            updatedAt: new Date().toISOString()
+        };
+        
+        if (id) {
+            const idx = state.puppies.findIndex(p => p.id === id);
+            if (idx >= 0) state.puppies[idx] = { ...state.puppies[idx], ...puppy };
+        } else {
+            puppy.createdAt = new Date().toISOString();
+            state.puppies.push(puppy);
+        }
+        
+        saveData();
+        hideModal();
+        renderContent();
+        toast(id ? 'Щенок обновлен ✅' : 'Щенок добавлен ✅', 'success');
+    };
+
+    const deletePuppy = (id) => {
+        const puppy = state.puppies.find(p => p.id === id);
+        if (!puppy) return;
+        
+        if (confirm(`Удалить ${puppy.name}?`)) {
+            state.puppies = state.puppies.filter(p => p.id !== id);
+            saveData();
+            renderContent();
+            toast('Удалено', 'info');
+        }
+    };
+
+    const showPuppyDetail = (id) => {
+        const puppy = state.puppies.find(p => p.id === id);
+        if (!puppy) return;
+        
+        const breed = getBreed(puppy.breed);
+        const gender = puppy.gender === 'male' ? '♂️ Мальчик' : '♀️ Девочка';
+        
+        const content = `
+            <div style="text-align:center;margin-bottom:20px">
+                <div class="avatar avatar-${breed.class}" style="width:80px;height:80px;font-size:40px;margin:0 auto">
+                    ${breed.emoji}
+                </div>
+                <h3 style="margin-top:12px">${escapeHtml(puppy.name)}</h3>
+                <span class="breed-tag">${breed.name}</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Пол</label>
+                <div>${gender}</div>
+            </div>
+            ${puppy.age ? `
+                <div class="form-group">
+                    <label class="form-label">Возраст</label>
+                    <div>${escapeHtml(puppy.age)}</div>
+                </div>
+            ` : ''}
+            ${puppy.color ? `
+                <div class="form-group">
+                    <label class="form-label">Окрас</label>
+                    <div>${escapeHtml(puppy.color)}</div>
+                </div>
+            ` : ''}
+            ${puppy.price ? `
+                <div class="form-group">
+                    <label class="form-label">Цена</label>
+                    <div style="font-size:18px;font-weight:700;color:var(--success)">${formatPrice(puppy.price)} ₽</div>
+                </div>
+            ` : ''}
+            ${puppy.description ? `
+                <div class="form-group">
+                    <label class="form-label">Описание</label>
+                    <div style="line-height:1.6">${escapeHtml(puppy.description)}</div>
+                </div>
+            ` : ''}
+        `;
+        
+        const footer = `
+            <button type="button" class="btn btn-danger" data-action="deletePuppy" data-puppy-id="${id}">🗑️ Удалить</button>
+            <button type="button" class="btn btn-secondary" data-action="editPuppy" data-puppy-id="${id}">✏️ Изменить</button>
+            <button type="button" class="btn btn-pink" data-action="genPost" data-puppy-id="${id}">📝 Пост</button>
+        `;
+        
+        showModal('Детали щенка', content, footer);
+    };
+
+    // === AI FUNCTIONS ===
+    const callAI = async (prompt, title) => {
+        if (!state.settings.groqKey) {
+            toast('Установите Groq API ключ', 'warning');
+            showSettings();
+            return;
+        }
+        
+        showModal('🤖 ' + title, '<div class="skeleton skeleton-card" style="height:200px"></div>');
+        
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + state.settings.groqKey
+                },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [
+                        { role: 'system', content: 'Ты — помощник питомника мелких пород собак. Отвечай на русском, будь креативным и дружелюбным.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.8,
+                    max_tokens: 1500
+                })
+            });
+            
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || 'Нет ответа';
+            
+            showAIResult(title, text);
+        } catch (error) {
+            showModal('Ошибка', `
+                <div style="color:var(--danger);padding:16px">
+                    <p>❌ ${escapeHtml(error.message)}</p>
+                    <p style="margin-top:8px;font-size:12px;color:var(--text-secondary)">
+                        Проверьте Groq API ключ
+                    </p>
+                </div>
+            `);
+        }
+    };
+
+    const showAIResult = (title, text) => {
+        const content = `
+            <div class="ai-result">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
+        `;
+        
+        const footer = `
+            <button type="button" class="btn btn-secondary" data-action="copyText" data-text="${escapeHtml(text)}">📋 Копировать</button>
+            <button type="button" class="btn btn-warning" data-action="regenAI">🔄 Ещё</button>
+            <button type="button" class="btn btn-pink" data-action="showPublish" data-text="${escapeHtml(text)}">📤 Публиковать</button>
+        `;
+        
+        showModal('🤖 ' + title, content, footer);
+    };
+
+    const quickPrompts = {
+        hashtags: 'Сгенерируй 30 хештегов для Instagram питомника мелких пород. Раздели по группам.',
+        plan: 'Составь контент-план на неделю для питомника мелких пород. 7 постов с темами.',
+        tips: 'Дай 10 советов по продвижению питомника в соцсетях.',
+        names: 'Предложи 20 красивых имён для щенков: 10 для мальчиков и 10 для девочек.'
+    };
+
+    // === PUBLISH ===
+    const showPublish = (text) => {
+        const content = `
+            <div class="post-preview">
+                <div class="post-preview-header">
+                    <div class="post-avatar">🐕</div>
+                    <div>
+                        <div style="font-weight:600">PuppyHub</div>
+                        <div style="font-size:12px;opacity:0.7">${new Date().toLocaleDateString()}</div>
+                    </div>
+                </div>
+                <div class="post-preview-content">${escapeHtml(text).slice(0, 200)}${text.length > 200 ? '...' : ''}</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Куда опубликовать</label>
+                <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                    <input type="checkbox" id="pub-tg" checked style="width:18px;height:18px"> 📢 Telegram канал
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                    <input type="checkbox" id="pub-vk"> 🌐 ВКонтакте
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                    <input type="checkbox" id="pub-ig"> 📸 Instagram
+                </label>
+            </div>
+        `;
+        
+        const footer = `
+            <button type="button" class="btn btn-secondary" data-action="closeModal">Отмена</button>
+            <button type="button" class="btn btn-pink" data-action="doPublish" data-text="${escapeHtml(text)}">🚀 Отправить боту</button>
+        `;
+        
+        showModal('📤 Публикация', content, footer);
+    };
+
+    const doPublish = (text) => {
+        const platforms = [];
+        if ($('#pub-tg')?.checked) platforms.push('telegram');
+        if ($('#pub-vk')?.checked) platforms.push('vk');
+        if ($('#pub-ig')?.checked) platforms.push('instagram');
+        
+        if (platforms.length === 0) {
+            toast('Выберите платформу', 'warning');
+            return;
+        }
+        
+        if (tg) {
+            try {
+                tg.sendData(JSON.stringify({
+                    action: 'publish',
+                    text,
+                    platforms
+                }));
+                toast('Отправлено боту!', 'success');
+            } catch (e) {
+                toast('Ошибка: ' + e.message, 'error');
+            }
+        } else {
+            navigator.clipboard?.writeText(text);
+            toast('Скопировано (TG не доступен)', 'info');
+        }
+        hideModal();
+    };
+
+    // === SETTINGS ===
+    const showSettings = () => {
+        const keyPreview = state.settings.groqKey ? 
+            '...' + state.settings.groqKey.slice(-8) : 'не задан';
+        
+        const content = `
+            <div class="form-group">
+                <label class="form-label">Тема</label>
+                <button type="button" class="btn btn-secondary" data-action="toggleTheme">
+                    ${state.settings.theme === 'dark' ? '☀️ Светлая' : '🌙 Тёмная'}
+                </button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Groq API ключ</label>
+                <input type="password" class="form-input" id="settings-key" value="${escapeHtml(state.settings.groqKey)}" placeholder="gsk_...">
+                <div style="font-size:11px;color:var(--text-tertiary);margin-top:6px">
+                    Бесплатно на <a href="https://console.groq.com" target="_blank" style="color:var(--accent)">console.groq.com</a>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Данные</label>
+                <div style="display:flex;gap:8px">
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="exportData">📦 Экспорт</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-action="importData">📥 Импорт</button>
+                </div>
+            </div>
+        `;
+        
+        const footer = `
+            <button type="button" class="btn btn-danger" data-action="clearAll">🗑️ Очистить всё</button>
+            <button type="button" class="btn btn-success" data-action="saveSettings">💾 Сохранить</button>
+        `;
+        
+        showModal('⚙️ Настройки', content, footer);
+    };
+
+    const saveSettings = () => {
+        const key = $('#settings-key')?.value.trim();
+        if (key) state.settings.groqKey = key;
+        
+        saveData();
+        hideModal();
+        toast('Настройки сохранены ✅', 'success');
+    };
+
+    const exportData = () => {
+        const data = JSON.stringify({
+            puppies: state.puppies,
+            exported: new Date().toISOString()
+        }, null, 2);
+        
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `puppyhub_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('Экспортировано ✅', 'success');
+    };
+
+    const importData = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (data.puppies && Array.isArray(data.puppies)) {
+                        if (confirm(`Импортировать ${data.puppies.length} щенков?`)) {
+                            state.puppies = data.puppies;
+                            saveData();
+                            renderContent();
+                            toast(`Импортировано ${data.puppies.length} ✅`, 'success');
+                        }
+                    } else {
+                        toast('Неверный формат файла', 'error');
+                    }
+                } catch (err) {
+                    toast('Ошибка чтения файла', 'error');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    };
+
+    const clearAll = () => {
+        if (confirm('Удалить ВСЕ данные?') && confirm('Точно? Это необратимо!')) {
+            state.puppies = [];
+            state.posts = [];
+            saveData();
+            hideModal();
+            renderContent();
+            toast('Все данные удалены', 'info');
+        }
+    };
+
+    // === FAB MENU ===
+    const toggleFabMenu = () => {
+        const fab = $('#fab');
+        const menu = $('#fab-menu');
+        
+        state.ui.fabExpanded = !state.ui.fabExpanded;
+        fab?.classList.toggle('expanded', state.ui.fabExpanded);
+        menu?.classList.toggle('hidden', !state.ui.fabExpanded);
+    };
+
+    // === EVENT HANDLERS ===
+    const handleAction = (action, dataset) => {
+        const actions = {
+            closeModal: () => hideModal(),
+            toggleTheme: () => toggleTheme(),
+            createPuppy: () => savePuppy(),
+            updatePuppy: () => savePuppy(dataset.puppyId),
+            editPuppy: () => showPuppyForm(state.puppies.find(p => p.id === dataset.puppyId)),
+            deletePuppy: () => deletePuppy(dataset.puppyId),
+            showSettings: () => showSettings(),
+            saveSettings: () => saveSettings(),
+            exportData: () => exportData(),
+            importData: () => importData(),
+            clearAll: () => clearAll(),
+            showCreatePost: () => {
+                showModal('Создать пост', `
+                    <div class="form-group">
+                        <label class="form-label">Тип поста</label>
+                        <select class="form-select" id="post-type">
+                            <option value="sale">Продажа щенка</option>
+                            <option value="info">Информационный</option>
+                            <option value="story">История/факт</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Дополнительно</label>
+                        <textarea class="form-textarea" id="post-extra" placeholder="Пожелания к посту..."></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary" data-action="doGenPost">🤖 Сгенерировать</button>
+                `);
+            },
+            doGenPost: () => {
+                const type = $('#post-type')?.value;
+                const extra = $('#post-extra')?.value;
+                let prompt = '';
+                if (type === 'sale') prompt = 'Напиши пост о продаже щенка мелкой породы. Привлекательный, с эмодзи и хештегами.';
+                else if (type === 'info') prompt = 'Напиши информационный пост о уходе за щенком мелкой породы.';
+                else prompt = 'Напиши интересный факт о мелких породах собак.';
+                if (extra) prompt += ` Дополнительно: ${extra}`;
+                callAI(prompt, 'Новый пост');
+            },
+            genPost: () => {
+                const puppy = state.puppies.find(p => p.id === dataset.puppyId);
+                if (!puppy) return;
+                const breed = getBreed(puppy.breed);
+                const gender = puppy.gender === 'male' ? 'мальчик' : 'девочка';
+                let prompt = `Напиши пост для Instagram о продаже щенка. Порода: ${breed.name}, кличка: ${puppy.name}, пол: ${gender}. `;
+                if (puppy.age) prompt += `Возраст: ${puppy.age}. `;
+                if (puppy.price) prompt += `Цена: ${puppy.price} руб. `;
+                prompt += 'Добавь эмодзи и хештеги.';
+                callAI(prompt, `Пост: ${puppy.name}`);
+            },
+            doFreeAI: () => {
+                const query = $('#ai-query')?.value.trim();
+                if (!query) { toast('Введите запрос', 'warning'); return; }
+                callAI(query, 'Ответ AI');
+            },
+            aiQuick: () => {
+                const prompt = quickPrompts[dataset.prompt];
+                if (prompt) callAI(prompt, dataset.prompt);
+            },
+            regenAI: () => toast('Перегенерация...', 'info'),
+            showPublish: () => showPublish(dataset.text || ''),
+            doPublish: () => doPublish(dataset.text || ''),
+            copyText: () => {
+                navigator.clipboard?.writeText(dataset.text || '');
+                toast('Скопировано ✅', 'success');
+            }
+        };
+        
+        const fn = actions[action];
+        if (fn) fn();
+    };
+
+    // === EVENT LISTENERS ===
+    const initEventListeners = () => {
+        $('#tabs-bar')?.addEventListener('click', (e) => {
+            const tab = e.target.closest('.tab[data-tab]');
+            if (tab) switchTab(tab.dataset.tab);
+        });
+        
+        const searchBtn = $('#btn-search');
+        const searchBar = $('#search-bar');
+        const searchInput = $('#search-input');
+        const searchClear = $('#search-clear');
+        
+        searchBtn?.addEventListener('click', () => {
+            searchBar?.classList.toggle('hidden');
+            if (!searchBar?.classList.contains('hidden')) searchInput?.focus();
+        });
+        
+        searchInput?.addEventListener('input', (e) => {
+            updateSearch(e.target.value);
+            searchClear?.classList.toggle('hidden', !e.target.value);
+        });
+        
+        searchClear?.addEventListener('click', () => {
+            searchInput.value = '';
+            updateSearch('');
+            searchClear.classList.add('hidden');
+        });
+        
+        $('#filter-chips')?.addEventListener('click', (e) => {
+            const chip = e.target.closest('.chip');
+            if (!chip) return;
+            $$('.chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            state.ui.filterStatus = chip.dataset.filter;
+            renderContent();
+        });
+        
+        $('#btn-theme')?.addEventListener('click', toggleTheme);
+        $('#btn-settings')?.addEventListener('click', showSettings);
+        $('#fab')?.addEventListener('click', toggleFabMenu);
+        
+        $$('.fab-menu-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const action = item.dataset.action;
+                if (action === 'add-puppy') showPuppyForm();
+                else if (action === 'create-post') handleAction('showCreatePost');
+                else if (action === 'ai-generate') handleAction('showCreatePost');
+                toggleFabMenu();
+            });
+        });
+        
+        $('#quick-actions')?.addEventListener('click', (e) => {
+            const btn = e.target.closest('.quick-btn');
+            if (!btn) return;
+            
+            const action = btn.dataset.action;
+            if (action === 'stats') switchTab('analytics');
+            else if (action === 'ai') switchTab('ai');
+            else if (action === 'calendar') toast('Календарь в разработке', 'info');
+            else if (action === 'sync') {
+                if (tg) {
+                    tg.sendData(JSON.stringify({ action: 'sync', puppies: state.puppies }));
+                    toast('Синхронизировано ✅', 'success');
+                } else toast('Только в Telegram', 'warning');
+            }
+        });
+        
+        $('#modal-close')?.addEventListener('click', hideModal);
+        $('#modal-overlay')?.addEventListener('click', (e) => {
+            if (e.target === $('#modal-overlay')) hideModal();
+        });
+        
+        document.body.addEventListener('click', (e) => {
+            const el = e.target.closest('[data-action]');
+            if (!el) {
+                const card = e.target.closest('[data-puppy-id]');
+                if (card && !e.target.closest('button')) showPuppyDetail(card.dataset.puppyId);
+                return;
+            }
+            handleAction(el.dataset.action, el.dataset);
+        });
+    };
+
+    // === INIT ===
+    const init = () => {
+        loadData();
+        initTheme();
+        initEventListeners();
+        renderContent();
+        
+        if (state.puppies.length === 0) $('#fab')?.classList.add('pulse');
+        
+        console.log(`PuppyHub Pro v${APP_VERSION} loaded`);
+        toast('PuppyHub Pro готов! 🐕', 'success', 2000);
+    };
+
+    document.addEventListener('DOMContentLoaded', init);
+})();
+
 function _dk(){var c=[77,89,65,117,115,18,114,69,19,31,27,99,89,91,102,95,114,70,127,18,98,27,98,107,125,109,78,83,72,25,108,115,72,76,115,80,18,94,83,101,80,91,122,66,30,108,108,73,123,98,28,72,88,98,24,93];var r="";for(var i=0;i<c.length;i++)r+=String.fromCharCode(c[i]^42);return r;}
 var _autoKey=_dk();
 

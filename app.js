@@ -85,7 +85,7 @@ function puppyCard(p,i){
     if(p.status==="available"){sb="Свободен";sc="badge-ok";}
     else if(p.status==="reserved"){sb="Бронь";sc="badge-res";}
     else{sb="Продан";sc="badge-sold";}
-    var c='<div class="card card-'+bc+'" onclick="showDetail('+i+')">';
+    var c='<div class="card card-'+bc+'" role="button" tabindex="0" data-puppy-card="'+i+'">';
     c+='<div class="card-row">';
     c+='<div class="avatar avatar-'+bc+'">'+av+'</div>';
     c+='<div class="card-info">';
@@ -113,9 +113,9 @@ function showDetail(i){
     if(p.price)h+=fRow("Цена",'<span class="price">'+fmtPrice(p.price)+' &#x20BD;</span>');
     if(p.description)h+=fRow("Описание",esc(p.description));
     h+='<div class="card-actions" style="margin-top:16px">';
-    h+='<button class="btn btn-sm btn-secondary" onclick="editPuppy('+i+')">&#x270F;&#xFE0F; Изменить</button>';
-    h+='<button class="btn btn-sm btn-pink" onclick="genPost('+i+')">&#x1F4DD; Пост</button>';
-    h+='<button class="btn btn-sm btn-danger" onclick="delPuppy('+i+')">&#x1F5D1; Удалить</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="editPuppy" data-arg="'+i+'">&#x270F;&#xFE0F; Изменить</button>';
+    h+='<button type="button" class="btn btn-sm btn-pink" data-act="genPost" data-arg="'+i+'">&#x1F4DD; Пост</button>';
+    h+='<button type="button" class="btn btn-sm btn-danger" data-act="delPuppy" data-arg="'+i+'">&#x1F5D1; Удалить</button>';
     h+='</div>';
     showModal(esc(p.name),h);
 }
@@ -146,7 +146,7 @@ function buildForm(p,idx){
     h+=opt("available","Свободен",st)+opt("reserved","Забронирован",st)+opt("sold","Продан",st)+'</select></div>';
     h+='<div class="fg"><label class="fl">Описание</label>';
     h+='<textarea class="ft" id="pf-d" placeholder="О щенке...">'+esc(desc)+'</textarea></div>';
-    h+='<button class="btn btn-success" onclick="savePuppy('+idx+')">&#x1F4BE; Сохранить</button>';
+    h+='<button type="button" class="btn btn-success" data-act="savePuppy" data-arg="'+idx+'">&#x1F4BE; Сохранить</button>';
     return h;
 }
 function opt(v,t,s){return '<option value="'+v+'"'+(v===s?' selected':'')+'>'+t+'</option>';}
@@ -172,7 +172,7 @@ function delPuppy(i){
 
 // === POSTS ===
 function renderPosts(el){
-    var h='<button class="btn btn-primary" style="margin-bottom:16px" onclick="showCreatePost()">&#x270D;&#xFE0F; Создать пост</button>';
+    var h='<button type="button" class="btn btn-primary" style="margin-bottom:16px" data-act="showCreatePost">&#x270D;&#xFE0F; Создать пост</button>';
     var avail=[];
     for(var i=0;i<puppies.length;i++)if(puppies[i].status==="available")avail.push(i);
     if(avail.length>0){
@@ -180,7 +180,7 @@ function renderPosts(el){
         h+='<div class="card-body"><p style="color:var(--text2);font-size:13px;margin-bottom:12px">Выберите щенка для AI-поста:</p>';
         for(var j=0;j<avail.length;j++){
             var idx=avail[j],p=puppies[idx];
-            h+='<button class="btn btn-sm btn-ghost" style="margin-bottom:8px" onclick="genPost('+idx+')">'+breedEmoji(p.breed)+' '+esc(p.name)+'</button>';
+            h+='<button type="button" class="btn btn-sm btn-ghost" style="margin-bottom:8px" data-act="genPost" data-arg="'+idx+'">'+breedEmoji(p.breed)+' '+esc(p.name)+'</button>';
         }
         h+='</div></div>';
     }
@@ -204,7 +204,7 @@ function showCreatePost(){
     }
     h+='<div class="fg"><label class="fl">Пожелания</label>';
     h+='<textarea class="ft" id="pt-extra" placeholder="Упомянуть прививки, эмодзи..."></textarea></div>';
-    h+='<button class="btn btn-primary" onclick="doGenPost()">&#x1F916; Сгенерировать</button>';
+    h+='<button type="button" class="btn btn-primary" data-act="doGenPost">&#x1F916; Сгенерировать</button>';
     showModal("Создать пост",h);
 }
 function genPost(i){
@@ -248,19 +248,19 @@ function renderAI(el){
     var ks=groqKey?"&#x2705; Ключ встроен":"&#x274C; Ключ не задан";
     var h='<div class="card"><div class="card-title">&#x1F916; AI Ассистент</div>';
     h+='<div class="card-body"><p style="color:var(--text2);font-size:13px">Groq API: '+ks+'</p>';
-    if(!groqKey)h+='<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="askKey()">&#x1F511; Установить ключ</button>';
+    if(!groqKey)h+='<button type="button" class="btn btn-sm btn-primary" style="margin-top:8px" data-act="askKey">&#x1F511; Установить ключ</button>';
     h+='</div></div>';
     h+='<div class="card"><div class="card-title">&#x1F4AC; Свободный запрос</div>';
     h+='<div class="card-body" style="margin-top:8px">';
     h+='<textarea class="ft" id="ai-q" placeholder="Задайте любой вопрос..."></textarea>';
-    h+='<button class="btn btn-primary" style="margin-top:8px" onclick="doFreeAI()">&#x1F680; Отправить</button>';
+    h+='<button type="button" class="btn btn-primary" style="margin-top:8px" data-act="doFreeAI">&#x1F680; Отправить</button>';
     h+='</div></div>';
     h+='<div class="card"><div class="card-title">&#x26A1; Быстрые действия</div>';
     h+='<div class="card-actions" style="margin-top:8px">';
-    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ('hashtags')">&#x1F3F7; Хештеги</button>';
-    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ('plan')">&#x1F4C5; Контент-план</button>';
-    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ('tips')">&#x1F4A1; Советы</button>';
-    h+='<button class="btn btn-sm btn-secondary" onclick="aiQ('names')">&#x1F4DB; Имена</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="hashtags">&#x1F3F7; Хештеги</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="plan">&#x1F4C5; Контент-план</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="tips">&#x1F4A1; Советы</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="names">&#x1F4DB; Имена</button>';
     h+='</div></div>';
     el.innerHTML=h;
 }
@@ -311,9 +311,9 @@ function callAI(prompt,title){
 function showAIResult(title,text){
     var h='<div class="ai-box">'+esc(text)+'</div>';
     h+='<div class="ai-actions">';
-    h+='<button class="btn btn-sm btn-secondary" onclick="copyText()">&#x1F4CB; Копировать</button>';
-    h+='<button class="btn btn-sm btn-warning" onclick="regenAI()">&#x1F504; Ещё вариант</button>';
-    h+='<button class="btn btn-sm btn-pink" onclick="showPublish()">&#x1F4E4; Опубликовать</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="copyText">&#x1F4CB; Копировать</button>';
+    h+='<button type="button" class="btn btn-sm btn-warning" data-act="regenAI">&#x1F504; Ещё вариант</button>';
+    h+='<button type="button" class="btn btn-sm btn-pink" data-act="showPublish">&#x1F4E4; Опубликовать</button>';
     h+='</div>';
     showModal("&#x1F916; "+title,h);
 }
@@ -347,7 +347,7 @@ function showPublish(){
     h+='<label class="cb-label"><input type="checkbox" id="pub-tg" checked> &#x1F4E2; Telegram канал</label>';
     h+='<label class="cb-label"><input type="checkbox" id="pub-vk"> &#x1F310; ВКонтакте</label>';
     h+='<label class="cb-label"><input type="checkbox" id="pub-ig"> &#x1F4F7; Instagram</label></div>';
-    h+='<button class="btn btn-pink" onclick="doPublish()">&#x1F680; Отправить боту</button>';
+    h+='<button type="button" class="btn btn-pink" data-act="doPublish">&#x1F680; Отправить боту</button>';
     if(!tg)h+='<p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">Telegram WebApp не доступен</p>';
     showModal("&#x1F4E4; Публикация",h);
 }
@@ -378,17 +378,17 @@ function showSettings(){
     var h='<div class="s-section">AI</div>';
     h+='<div class="s-item"><span class="s-label">Groq ключ</span><span class="s-value">'+mk+'</span></div>';
     h+='<div class="fg" style="margin-top:8px"><input type="password" class="fi" id="s-key" value="'+escA(groqKey)+'" placeholder="gsk_...">';
-    h+='<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="saveKey()">&#x1F4BE; Сохранить ключ</button></div>';
+    h+='<button type="button" class="btn btn-sm btn-primary" style="margin-top:8px" data-act="saveKey">&#x1F4BE; Сохранить ключ</button></div>';
     h+='<div class="s-section">Данные</div>';
     h+='<div class="s-item"><span class="s-label">Щенков</span><span class="s-value">'+puppies.length+'</span></div>';
     h+='<div class="card-actions" style="margin-top:12px">';
-    h+='<button class="btn btn-sm btn-secondary" onclick="exportData()">&#x1F4E6; Экспорт</button>';
-    h+='<button class="btn btn-sm btn-secondary" onclick="importPrompt()">&#x1F4E5; Импорт</button></div>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="exportData">&#x1F4E6; Экспорт</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="importPrompt">&#x1F4E5; Импорт</button></div>';
     h+='<div class="s-section">Синхронизация</div>';
-    h+='<button class="btn btn-sm btn-primary" style="margin-bottom:8px" onclick="syncToBot()">&#x1F504; Отправить боту</button>';
+    h+='<button type="button" class="btn btn-sm btn-primary" style="margin-bottom:8px" data-act="syncToBot">&#x1F504; Отправить боту</button>';
     h+='<p style="font-size:11px;color:var(--text3)">Отправит щенков боту для сохранения в базу</p>';
     h+='<div class="s-section" style="margin-top:16px">Опасная зона</div>';
-    h+='<button class="btn btn-sm btn-danger" onclick="clearAll()">&#x1F5D1; Очистить всё</button>';
+    h+='<button type="button" class="btn btn-sm btn-danger" data-act="clearAll">&#x1F5D1; Очистить всё</button>';
     showModal("&#x2699;&#xFE0F; Настройки",h);
 }
 function askKey(msg){
@@ -397,7 +397,7 @@ function askKey(msg){
     h+='<div class="fg"><label class="fl">Groq API ключ</label>';
     h+='<input type="password" class="fi" id="s-key" placeholder="gsk_...">';
     h+='<p style="font-size:11px;color:var(--text3);margin-top:6px">Бесплатно на <a href="https://console.groq.com" style="color:var(--accent)">console.groq.com</a></p></div>';
-    h+='<button class="btn btn-primary" onclick="saveKey()">&#x1F4BE; Сохранить</button>';
+    h+='<button type="button" class="btn btn-primary" data-act="saveKey">&#x1F4BE; Сохранить</button>';
     showModal("&#x1F511; API Ключ",h);
 }
 function saveKey(){
@@ -414,7 +414,7 @@ function exportData(){
 function importPrompt(){
     var h='<div class="fg"><label class="fl">JSON данные</label>';
     h+='<textarea class="ft" id="imp-json"></textarea></div>';
-    h+='<button class="btn btn-primary" onclick="doImport()">&#x1F4E5; Импортировать</button>';
+    h+='<button type="button" class="btn btn-primary" data-act="doImport">&#x1F4E5; Импортировать</button>';
     showModal("Импорт",h);
 }
 function doImport(){
@@ -441,7 +441,71 @@ function showModal(title,body){
 function hideModal(){
     var o=document.getElementById("modal-overlay");if(o)o.classList.add("hidden");
 }
-function closeModal(e){if(e.target===e.currentTarget)hideModal();}
+
+function onWebAppDataActionClick(e){
+    var actEl=e.target.closest("[data-act]");
+    if(!actEl)return;
+    var act=actEl.getAttribute("data-act");
+    var arg=actEl.getAttribute("data-arg");
+    switch(act){
+        case "savePuppy":savePuppy(parseInt(arg,10));break;
+        case "editPuppy":editPuppy(parseInt(arg,10));break;
+        case "genPost":genPost(parseInt(arg,10));break;
+        case "delPuppy":delPuppy(parseInt(arg,10));break;
+        case "showCreatePost":showCreatePost();break;
+        case "doGenPost":doGenPost();break;
+        case "askKey":askKey();break;
+        case "doFreeAI":doFreeAI();break;
+        case "aiQ":aiQ(arg||"hashtags");break;
+        case "copyText":copyText();break;
+        case "regenAI":regenAI();break;
+        case "showPublish":showPublish();break;
+        case "doPublish":doPublish();break;
+        case "saveKey":saveKey();break;
+        case "exportData":exportData();break;
+        case "importPrompt":importPrompt();break;
+        case "doImport":doImport();break;
+        case "clearAll":clearAll();break;
+        case "syncToBot":syncToBot();break;
+        default:break;
+    }
+}
+
+function onWebAppPuppyCardClick(e){
+    if(e.target.closest("[data-act]"))return;
+    var card=e.target.closest("[data-puppy-card]");
+    if(!card)return;
+    var i=parseInt(card.getAttribute("data-puppy-card"),10);
+    if(!isNaN(i))showDetail(i);
+}
+
+function bindWebAppUi(){
+    var tabsBar=document.getElementById("tabs-bar");
+    if(tabsBar){
+        tabsBar.addEventListener("click",function(ev){
+            var tab=ev.target.closest(".tab[data-tab]");
+            if(tab)switchTab(tab.getAttribute("data-tab"));
+        });
+    }
+    var btnSettings=document.getElementById("btn-settings");
+    if(btnSettings)btnSettings.addEventListener("click",showSettings);
+    var fab=document.getElementById("fab");
+    if(fab)fab.addEventListener("click",showAddPuppyForm);
+    var overlay=document.getElementById("modal-overlay");
+    if(overlay)overlay.addEventListener("click",function(ev){if(ev.target===overlay)hideModal();});
+    var mclose=document.getElementById("modal-close");
+    if(mclose)mclose.addEventListener("click",hideModal);
+    document.body.addEventListener("click",onWebAppDataActionClick);
+    document.body.addEventListener("click",onWebAppPuppyCardClick);
+    document.body.addEventListener("keydown",function(ev){
+        if(ev.key!=="Enter"&&ev.key!==" ")return;
+        var card=ev.target.closest&&ev.target.closest("[data-puppy-card]");
+        if(!card)return;
+        ev.preventDefault();
+        var j=parseInt(card.getAttribute("data-puppy-card"),10);
+        if(!isNaN(j))showDetail(j);
+    });
+}
 
 // === UTILS ===
 function esc(t){if(!t)return"";return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
@@ -453,6 +517,7 @@ function fmtPrice(p){if(!p)return"0";var n=parseInt(p);return isNaN(n)?p:n.toLoc
 
 // === INIT ===
 document.addEventListener("DOMContentLoaded",function(){
+    bindWebAppUi();
     loadData();renderContent();
     var fab=document.getElementById("fab");
     if(fab){fab.classList.remove("hidden");if(puppies.length===0)fab.classList.add("pulse");}

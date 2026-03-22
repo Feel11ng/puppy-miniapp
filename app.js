@@ -1,10 +1,47 @@
-/* === PUPPYHUB MINI APP v3 === */
-function _dk(){var c=[77,89,65,117,115,18,114,69,19,31,27,99,89,91,102,95,114,70,127,18,98,27,98,107,125,109,78,83,72,25,108,115,72,76,115,80,18,94,83,101,80,91,122,66,30,108,108,73,123,98,28,72,88,98,24,93];var r="";for(var i=0;i<c.length;i++)r+=String.fromCharCode(c[i]^42);return r;}
-var _autoKey=_dk();
-
+/* === PUPPYHUB MINI APP v4 === */
 // Telegram
 var tg=null;
 try{if(window.Telegram&&window.Telegram.WebApp){tg=window.Telegram.WebApp;tg.expand();tg.ready();}}catch(e){}
+
+function haptic(kind){
+    try{
+        if(!tg||!tg.HapticFeedback)return;
+        if(kind==="error")tg.HapticFeedback.notificationOccurred("error");
+        else if(kind==="success")tg.HapticFeedback.notificationOccurred("success");
+        else if(kind==="warn")tg.HapticFeedback.notificationOccurred("warning");
+        else tg.HapticFeedback.impactOccurred("medium");
+    }catch(e){}
+}
+
+function lightenHex(hex,mix){
+    hex=String(hex||"#818cf8").replace("#","");
+    if(hex.length!==6)return"#c084fc";
+    var r=parseInt(hex.substr(0,2),16),g=parseInt(hex.substr(2,2),16),b=parseInt(hex.substr(4,2),16);
+    r=Math.round(r+(255-r)*mix);g=Math.round(g+(255-g)*mix);b=Math.round(b+(255-b)*mix);
+    return"#"+[r,g,b].map(function(x){return("0"+x.toString(16)).slice(-2);}).join("");
+}
+
+function applyCustomAccentFromStorage(){
+    try{
+        var en=localStorage.getItem("ph_accent_custom")==="1";
+        var hx=localStorage.getItem("ph_accent_hex")||"#818cf8";
+        if(en&&/^#[0-9A-Fa-f]{6}$/.test(hx)){
+            document.documentElement.style.setProperty("--accent",hx);
+            document.documentElement.style.setProperty("--accent-end",lightenHex(hx,0.38));
+        }else{
+            document.documentElement.style.removeProperty("--accent");
+            document.documentElement.style.removeProperty("--accent-end");
+        }
+    }catch(e){}
+}
+
+function applyFontScaleFromStorage(){
+    try{
+        var s=localStorage.getItem("ph_font_scale")||"normal";
+        if(s!=="compact"&&s!=="large")s="normal";
+        document.documentElement.setAttribute("data-font-scale",s);
+    }catch(e){document.documentElement.setAttribute("data-font-scale","normal");}
+}
 
 /** Палитры: id = data-theme, цвета шапки TG под фон */
 var PH_THEMES=[
@@ -41,6 +78,7 @@ function applyTheme(id){
             tg.setBackgroundColor(th.tgBg);
         }catch(e){}
     }
+    applyCustomAccentFromStorage();
 }
 
 function syncThemeSwatches(selectedId){
@@ -59,22 +97,43 @@ var groqKey="";
 var pendingPost="";
 var lastPrompt="";
 var lastTitle="";
+var uiSearch="";
+var uiFilterStatus="all";
+var uiFilterBreed="all";
+var uiSort="new";
 
 // === DATA ===
 function loadData(){
     try{var s=localStorage.getItem("ph_puppies");puppies=s?JSON.parse(s):[];}catch(e){puppies=[];}
-    groqKey=localStorage.getItem("ph_groq")||_autoKey||"";
+    try{groqKey=localStorage.getItem("ph_groq")||"";}catch(e){groqKey="";}
 }
 function saveData(){
     localStorage.setItem("ph_puppies",JSON.stringify(puppies));
-    if(groqKey&&groqKey!==_autoKey) localStorage.setItem("ph_groq",groqKey);
+    try{if(groqKey)localStorage.setItem("ph_groq",groqKey);else localStorage.removeItem("ph_groq");}catch(e){}
+}
+
+function loadDrafts(){
+    try{return JSON.parse(localStorage.getItem("ph_drafts")||"[]");}catch(e){return [];}
+}
+function saveDrafts(arr){
+    try{localStorage.setItem("ph_drafts",JSON.stringify(arr||[]));}catch(e){}
+}
+function addDraftRecord(title,text){
+    var d=loadDrafts();
+    d.unshift({id:genId(),title:title||"Черновик",text:text||"",at:new Date().toISOString()});
+    saveDrafts(d);
 }
 function genId(){return Date.now().toString(36)+Math.random().toString(36).substr(2,6);}
 
 // === TOAST ===
 function toast(msg,type){
     var c=document.getElementById("toast-container");if(!c)return;
-    var t=document.createElement("div");t.className="toast toast-"+(type||"info");
+    var tc=type||"info";
+    if(tc==="ok"||tc==="success"){haptic("success");tc="ok";}
+    else if(tc==="err"||tc==="error"){haptic("error");tc="err";}
+    else if(tc==="warn")haptic("warn");
+    else haptic("light");
+    var t=document.createElement("div");t.className="toast toast-"+tc;
     t.textContent=msg;c.appendChild(t);
     setTimeout(function(){t.classList.add("toast-hide");
     setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},300);},3000);
@@ -102,6 +161,38 @@ function renderContent(){
 }
 
 // === PUPPIES LIST ===
+function getFilteredPuppyIndices(){
+    var q=(uiSearch||"").toLowerCase().trim();
+    var st=uiFilterStatus,br=uiFilterBreed,so=uiSort;
+    var idxs=[];
+    for(var i=0;i<puppies.length;i++){
+        var p=puppies[i];
+        if(q&&(String(p.name||"").toLowerCase().indexOf(q)<0))continue;
+        if(st!=="all"&&p.status!==st)continue;
+        if(br!=="all"&&p.breed!==br)continue;
+        idxs.push(i);
+    }
+    idxs.sort(function(ai,bi){
+        var pa=puppies[ai],pb=puppies[bi];
+        if(so==="name")return String(pa.name||"").localeCompare(String(pb.name||""),"ru");
+        if(so==="price-asc")return(parseInt(pa.price,10)||0)-(parseInt(pb.price,10)||0);
+        if(so==="price-desc")return(parseInt(pb.price,10)||0)-(parseInt(pa.price,10)||0);
+        return String(pb.created||"").localeCompare(String(pa.created||""));
+    });
+    return idxs;
+}
+
+function wirePuppyFilters(){
+    var se=document.getElementById("puppy-search");
+    if(se){se.value=uiSearch;se.oninput=function(){uiSearch=se.value;renderContent();};}
+    var fs=document.getElementById("flt-status");
+    if(fs){fs.value=uiFilterStatus;fs.onchange=function(){uiFilterStatus=fs.value;renderContent();};}
+    var fb=document.getElementById("flt-breed");
+    if(fb){fb.value=uiFilterBreed;fb.onchange=function(){uiFilterBreed=fb.value;renderContent();};}
+    var fo=document.getElementById("flt-sort");
+    if(fo){fo.value=uiSort;fo.onchange=function(){uiSort=fo.value;renderContent();};}
+}
+
 function renderPuppies(el){
     var ok=0,res=0,sold=0;
     for(var i=0;i<puppies.length;i++){
@@ -114,13 +205,34 @@ function renderPuppies(el){
     h+='<div class="stat"><div class="stat-num c-res">'+res+'</div><div class="stat-lbl">Бронь</div></div>';
     h+='<div class="stat"><div class="stat-num c-sold">'+sold+'</div><div class="stat-lbl">Проданы</div></div>';
     h+='</div>';
+    if(puppies.length>0){
+        h+='<div class="puppy-toolbar">';
+        h+='<div class="puppy-toolbar-row">';
+        h+='<div class="fg" style="margin-bottom:0"><label class="fl">Поиск по кличке</label>';
+        h+='<input type="search" class="fi puppy-search" id="puppy-search" placeholder="Начните вводить имя..." autocomplete="off"></div>';
+        h+='<div class="puppy-filters">';
+        h+='<div class="fg" style="margin-bottom:0"><label class="fl">Статус</label>';
+        h+='<select class="fs" id="flt-status">';
+        h+='<option value="all">Все</option><option value="available">Свободен</option><option value="reserved">Бронь</option><option value="sold">Продан</option></select></div>';
+        h+='<div class="fg" style="margin-bottom:0"><label class="fl">Порода</label>';
+        h+='<select class="fs" id="flt-breed">';
+        h+='<option value="all">Все</option><option value="chihuahua">Чихуахуа</option><option value="toypoodle">Той-пудель</option><option value="maltipoo">Мальтипу</option><option value="other">Другая</option></select></div>';
+        h+='<div class="fg" style="margin-bottom:0"><label class="fl">Сортировка</label>';
+        h+='<select class="fs" id="flt-sort">';
+        h+='<option value="new">Сначала новые</option><option value="name">По имени</option><option value="price-asc">Цена ↑</option><option value="price-desc">Цена ↓</option></select></div>';
+        h+='</div></div></div>';
+    }
     if(puppies.length===0){
         h+='<div class="empty"><div class="empty-icon">&#x1F436;</div>';
         h+='<p>Пока нет щенков<br>Нажмите + чтобы добавить первого!</p></div>';
     }else{
-        for(var i=0;i<puppies.length;i++) h+=puppyCard(puppies[i],i);
+        var ids=getFilteredPuppyIndices();
+        if(ids.length===0){
+            h+='<div class="empty"><div class="empty-icon">&#x1F50D;</div><p>Никого не нашли — сбросьте фильтры</p></div>';
+        }else for(var j=0;j<ids.length;j++)h+=puppyCard(puppies[ids[j]],ids[j]);
     }
     el.innerHTML=h;
+    wirePuppyFilters();
 }
 
 function puppyCard(p,i){
@@ -157,6 +269,9 @@ function showDetail(i){
     if(p.color)h+=fRow("Окрас",esc(p.color));
     if(p.price)h+=fRow("Цена",'<span class="price">'+fmtPrice(p.price)+' &#x20BD;</span>');
     if(p.description)h+=fRow("Описание",esc(p.description));
+    if(p.parents)h+=fRow("Родители",esc(p.parents));
+    if(p.documents)h+=fRow("Документы",esc(p.documents));
+    if(p.vaccinationDate||p.vaccination_date)h+=fRow("Прививки / дата",esc(p.vaccinationDate||p.vaccination_date));
     h+='<div class="card-actions" style="margin-top:16px">';
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="editPuppy" data-arg="'+i+'">&#x270F;&#xFE0F; Изменить</button>';
     h+='<button type="button" class="btn btn-sm btn-pink" data-act="genPost" data-arg="'+i+'">&#x1F4DD; Пост</button>';
@@ -173,6 +288,7 @@ function buildForm(p,idx){
     var n=p?p.name:"",b=p?p.breed:"chihuahua",g=p?p.gender:"female";
     var age=p?p.age||"":"",col=p?p.color||"":"",pr=p?p.price||"":"";
     var st=p?p.status||"available":"available",desc=p?p.description||"":"";
+    var par=p?p.parents||"":"",doc=p?p.documents||"":"",vac=p?p.vaccinationDate||p.vaccination_date||"":"";
     var h='';
     h+='<div class="fg"><label class="fl">Кличка *</label>';
     h+='<input type="text" class="fi" id="pf-n" value="'+escA(n)+'" placeholder="Имя щенка"></div>';
@@ -189,6 +305,12 @@ function buildForm(p,idx){
     h+='<input type="number" class="fi" id="pf-p" value="'+escA(pr)+'" placeholder="50000"></div>';
     h+='<div class="fg"><label class="fl">Статус</label><select class="fs" id="pf-s">';
     h+=opt("available","Свободен",st)+opt("reserved","Забронирован",st)+opt("sold","Продан",st)+'</select></div>';
+    h+='<div class="fg"><label class="fl">Родители</label>';
+    h+='<input type="text" class="fi" id="pf-par" value="'+escA(par)+'" placeholder="Отец / мать, титулы"></div>';
+    h+='<div class="fg"><label class="fl">Документы</label>';
+    h+='<input type="text" class="fi" id="pf-doc" value="'+escA(doc)+'" placeholder="РКФ, ветпаспорт, чип..."></div>';
+    h+='<div class="fg"><label class="fl">Дата вакцинации / прививки</label>';
+    h+='<input type="text" class="fi" id="pf-vac" value="'+escA(vac)+'" placeholder="например 15.01.2025 или щенячьи"></div>';
     h+='<div class="fg"><label class="fl">Описание</label>';
     h+='<textarea class="ft" id="pf-d" placeholder="О щенке...">'+esc(desc)+'</textarea></div>';
     h+='<button type="button" class="btn btn-success" data-act="savePuppy" data-arg="'+idx+'">&#x1F4BE; Сохранить</button>';
@@ -203,6 +325,8 @@ function savePuppy(idx){
         name:ne.value.trim(),breed:gv("pf-b","chihuahua"),gender:gv("pf-g","female"),
         age:gv("pf-a",""),color:gv("pf-c",""),price:gv("pf-p",""),
         status:gv("pf-s","available"),description:gv("pf-d",""),
+        parents:gv("pf-par",""),documents:gv("pf-doc",""),
+        vaccinationDate:gv("pf-vac",""),
         created:(idx>=0&&puppies[idx])?puppies[idx].created:new Date().toISOString()
     };
     if(idx>=0)puppies[idx]=d;else puppies.push(d);
@@ -217,7 +341,22 @@ function delPuppy(i){
 
 // === POSTS ===
 function renderPosts(el){
-    var h='<button type="button" class="btn btn-primary" style="margin-bottom:16px" data-act="showCreatePost">&#x270D;&#xFE0F; Создать пост</button>';
+    var drafts=loadDrafts();
+    var h="";
+    if(drafts.length>0){
+        h+='<div class="card"><div class="card-title">&#x1F4C1; Черновики ('+drafts.length+')</div><div class="card-body">';
+        for(var di=0;di<drafts.length;di++){
+            var dr=drafts[di];
+            h+='<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:10px">';
+            h+='<button type="button" class="draft-card" style="flex:1;text-align:left" data-act="openDraft" data-arg="'+esc(dr.id)+'">';
+            h+='<div class="draft-card-title">'+esc(dr.title||"Черновик")+'</div>';
+            h+='<div class="draft-card-preview">'+esc(String(dr.text||"").substring(0,140))+'</div></button>';
+            h+='<button type="button" class="btn btn-sm btn-danger" style="width:auto;min-width:48px;align-self:stretch" data-act="delDraft" data-arg="'+esc(dr.id)+'">&#x1F5D1;</button>';
+            h+='</div>';
+        }
+        h+='</div></div>';
+    }
+    h+='<button type="button" class="btn btn-primary" style="margin-bottom:16px" data-act="showCreatePost">&#x270D;&#xFE0F; Создать пост</button>';
     var avail=[];
     for(var i=0;i<puppies.length;i++)if(puppies[i].status==="available")avail.push(i);
     if(avail.length>0){
@@ -262,6 +401,9 @@ function genPost(i){
     if(p.color)pr+="Окрас: "+p.color+". ";
     if(p.price)pr+="Цена: "+p.price+" руб. ";
     if(p.description)pr+="Описание: "+p.description+". ";
+    if(p.parents)pr+="Родители: "+p.parents+". ";
+    if(p.documents)pr+="Документы: "+p.documents+". ";
+    if(p.vaccinationDate||p.vaccination_date)pr+="Прививки/дата: "+(p.vaccinationDate||p.vaccination_date)+". ";
     pr+="Добавь эмодзи и хештеги. На русском.";
     callAI(pr,"Пост: "+p.name);
 }
@@ -276,6 +418,9 @@ function doGenPost(){
         if(p.age)pr+=", возраст: "+p.age;
         if(p.color)pr+=", окрас: "+p.color;
         if(p.price)pr+=", цена: "+p.price+" руб";
+        if(p.parents)pr+=", родители: "+p.parents;
+        if(p.documents)pr+=", документы: "+p.documents;
+        if(p.vaccinationDate||p.vaccination_date)pr+=", прививки: "+(p.vaccinationDate||p.vaccination_date);
         pr+=". С эмодзи и хештегами.";
     }else if(type==="avito"){
         pr="Напиши объявление для Авито о продаже щенка мелкой породы. Заголовок + описание, без хештегов. ";
@@ -290,7 +435,7 @@ function doGenPost(){
 
 // === AI TAB ===
 function renderAI(el){
-    var ks=groqKey?"&#x2705; Ключ встроен":"&#x274C; Ключ не задан";
+    var ks=groqKey?"&#x2705; Ключ сохранён":"&#x274C; Ключ не задан — укажите в настройках";
     var h='<div class="card"><div class="card-title">&#x1F916; AI Ассистент</div>';
     h+='<div class="card-body"><p style="color:var(--text2);font-size:13px">Groq API: '+ks+'</p>';
     if(!groqKey)h+='<button type="button" class="btn btn-sm btn-primary" style="margin-top:8px" data-act="askKey">&#x1F511; Установить ключ</button>';
@@ -348,19 +493,43 @@ function callAI(prompt,title){
         showAIResult(title,text);
     })
     .catch(function(e){
+        haptic("error");
         showModal("Ошибка",'<div style="color:var(--danger);padding:16px"><p>&#x274C; '+esc(e.message)+'</p><p style="margin-top:8px;font-size:12px;color:var(--text2)">Проверьте Groq API ключ.</p></div>');
     });
 }
 
 // === ПОКАЗ РЕЗУЛЬТАТА AI С КНОПКОЙ ПЕРЕГЕНЕРАЦИИ ===
 function showAIResult(title,text){
+    pendingPost=text;
+    lastTitle=title;
     var h='<div class="ai-box">'+esc(text)+'</div>';
     h+='<div class="ai-actions">';
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="copyText">&#x1F4CB; Копировать</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="saveDraftFromAI">&#x1F4BE; В черновики</button>';
     h+='<button type="button" class="btn btn-sm btn-warning" data-act="regenAI">&#x1F504; Ещё вариант</button>';
     h+='<button type="button" class="btn btn-sm btn-pink" data-act="showPublish">&#x1F4E4; Опубликовать</button>';
     h+='</div>';
     showModal("&#x1F916; "+title,h);
+}
+
+function openDraftById(did){
+    var d=loadDrafts();
+    for(var i=0;i<d.length;i++){
+        if(String(d[i].id)===String(did)){
+            pendingPost=d[i].text||"";
+            lastTitle=d[i].title||"Черновик";
+            lastPrompt="";
+            showAIResult(lastTitle,pendingPost);
+            return;
+        }
+    }
+    toast("Черновик не найден","warn");
+}
+
+function deleteDraftById(did){
+    saveDrafts(loadDrafts().filter(function(x){return String(x.id)!==String(did);}));
+    renderContent();
+    toast("Удалено","info");
 }
 
 // === ПЕРЕГЕНЕРАЦИЯ ===
@@ -430,6 +599,23 @@ function showSettings(){
         h+='<button type="button" class="theme-swatch'+sel+'" data-act="setTheme" data-arg="'+th.id+'" style="--swatch-g:'+th.g+'" title="'+esc(th.label)+'"><span class="theme-swatch-inner"></span><span class="theme-swatch-label">'+esc(th.label)+'</span></button>';
     }
     h+='</div>';
+    h+='<div class="s-section">Шрифт</div>';
+    h+='<p style="font-size:12px;color:var(--text3);margin-bottom:8px">Размер текста в приложении</p>';
+    h+='<div class="font-scale-row">';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="setFontScale" data-arg="compact">Компакт</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="setFontScale" data-arg="normal">Обычный</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" data-act="setFontScale" data-arg="large">Крупный</button></div>';
+    h+='<div class="s-section">Свой акцент</div>';
+    h+='<p style="font-size:12px;color:var(--text3);margin-bottom:8px">Поверх выбранной темы (кнопки, акценты)</p>';
+    var cac="";
+    try{cac=localStorage.getItem("ph_accent_custom")==="1";}catch(e){}
+    var chx="#818cf8";
+    try{chx=localStorage.getItem("ph_accent_hex")||chx;}catch(e){}
+    if(!/^#[0-9A-Fa-f]{6}$/.test(chx))chx="#818cf8";
+    h+='<div class="accent-row"><label class="cb-label" style="border:none;padding:8px 0"><input type="checkbox" id="accent-en" '+(cac?"checked":"")+'> Включить</label>';
+    h+='<input type="color" id="accent-col" value="'+escA(chx)+'"></div>';
+    h+='<button type="button" class="btn btn-sm btn-primary" style="margin-top:8px" data-act="applyAccentSettings">Применить акцент</button>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" style="margin-top:8px" data-act="resetCustomAccent">Сбросить (только тема)</button>';
     h+='<div class="s-section">AI</div>';
     h+='<div class="s-item"><span class="s-label">Groq ключ</span><span class="s-value">'+mk+'</span></div>';
     h+='<div class="fg" style="margin-top:8px"><input type="password" class="fi" id="s-key" value="'+escA(groqKey)+'" placeholder="gsk_...">';
@@ -457,8 +643,11 @@ function askKey(msg){
 }
 function saveKey(){
     var e=document.getElementById("s-key");if(!e)return;
-    groqKey=e.value.trim();saveData();hideModal();renderContent();
+    groqKey=e.value.trim();
+    try{if(!groqKey)localStorage.removeItem("ph_groq");}catch(x){}
+    saveData();hideModal();renderContent();
     if(groqKey)toast("Ключ сохранён ✅","ok");
+    else toast("Ключ очищен","info");
 }
 function exportData(){
     var d=JSON.stringify({puppies:puppies,exported:new Date().toISOString()},null,2);
@@ -527,6 +716,35 @@ function onWebAppDataActionClick(e){
             syncThemeSwatches(arg);
             toast("Тема применена ✨","ok");
             break;
+        case "setFontScale":
+            try{localStorage.setItem("ph_font_scale",arg||"normal");}catch(e){}
+            applyFontScaleFromStorage();
+            toast("Размер текста обновлён","ok");
+            break;
+        case "applyAccentSettings":
+            var en=document.getElementById("accent-en");
+            var col=document.getElementById("accent-col");
+            try{
+                if(col&&/^#[0-9A-Fa-f]{6}$/.test(col.value))localStorage.setItem("ph_accent_hex",col.value);
+                if(en)localStorage.setItem("ph_accent_custom",en.checked?"1":"0");
+            }catch(e){}
+            applyCustomAccentFromStorage();
+            toast("Акцент обновлён","ok");
+            break;
+        case "resetCustomAccent":
+            try{localStorage.removeItem("ph_accent_custom");localStorage.removeItem("ph_accent_hex");}catch(e){}
+            applyCustomAccentFromStorage();
+            toast("Сброшено","ok");
+            break;
+        case "saveDraftFromAI":
+            if(!pendingPost){toast("Нет текста","warn");break;}
+            addDraftRecord(lastTitle||"Пост",pendingPost);
+            toast("В черновиках","ok");
+            break;
+        case "openDraft":openDraftById(arg);break;
+        case "delDraft":
+            if(confirm("Удалить черновик?"))deleteDraftById(arg);
+            break;
         default:break;
     }
 }
@@ -577,10 +795,12 @@ function fmtPrice(p){if(!p)return"0";var n=parseInt(p);return isNaN(n)?p:n.toLoc
 
 // === INIT ===
 document.addEventListener("DOMContentLoaded",function(){
+    applyFontScaleFromStorage();
     try{
         var saved=localStorage.getItem("ph_theme")||"midnight-indigo";
         applyTheme(saved);
     }catch(e){applyTheme("midnight-indigo");}
+    applyCustomAccentFromStorage();
     bindWebAppUi();
     loadData();renderContent();
     var fab=document.getElementById("fab");

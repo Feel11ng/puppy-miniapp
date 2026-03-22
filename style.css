@@ -479,3 +479,41 @@ pointer-events:none;
 ::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:5px}
 
 a{color:var(--accent);font-weight:600}
+
+/* Масштаб интерфейса */
+html[data-font-scale="compact"] #app{font-size:14px}
+html[data-font-scale="normal"] #app{font-size:16px}
+html[data-font-scale="large"] #app{font-size:18px}
+
+.puppy-toolbar{
+background:var(--card);backdrop-filter:blur(12px);
+border:1px solid var(--card-border);border-radius:var(--r);
+padding:12px;margin-bottom:14px;
+box-shadow:var(--shadow-card);
+}
+.puppy-toolbar .fl{margin-bottom:6px}
+.puppy-toolbar-row{display:flex;flex-direction:column;gap:10px}
+.puppy-search{width:100%}
+.puppy-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(min-width:380px){.puppy-filters{grid-template-columns:1fr 1fr 1fr}}
+
+.draft-card{
+background:var(--card);border:1px solid var(--card-border);
+border-radius:var(--r-sm);padding:12px;margin-bottom:10px;
+text-align:left;cursor:pointer;width:100%;
+font-family:inherit;color:var(--text);
+transition:transform .15s,box-shadow .15s;
+}
+.draft-card:active{transform:scale(.99)}
+.draft-card-title{font-weight:700;font-size:13px;margin-bottom:4px}
+.draft-card-preview{font-size:11px;color:var(--text3);line-height:1.4;
+display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+.font-scale-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.font-scale-row .btn-sm{flex:1;min-width:0}
+
+.accent-row{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+.accent-row input[type="color"]{
+width:52px;height:44px;border:1px solid var(--card-border);
+border-radius:var(--r-sm);padding:2px;cursor:pointer;background:var(--bg2);
+}

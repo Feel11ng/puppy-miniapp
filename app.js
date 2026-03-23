@@ -104,6 +104,8 @@ var uiSort="new";
 var aiHistory=[];
 var swipeStartX=0;
 var swipeCard=null;
+var pendingMedia=[];
+var pendingPuppyIdx=-1;
 
 // === DATA ===
 function loadData(){
@@ -459,6 +461,7 @@ function renderPosts(el){
     el.innerHTML=h;
 }
 function showCreatePost(){
+    pendingMedia=[];
     var h='<div class="fg"><label class="fl">Тип</label><select class="fs" id="pt-type">';
     h+='<option value="sale">Продажа щенка</option>';
     h+='<option value="info">Информационный</option>';
@@ -470,10 +473,31 @@ function showCreatePost(){
             h+='<option value="'+i+'">'+esc(puppies[i].name)+' ('+breedName(puppies[i].breed)+')</option>';
         h+='</select></div>';
     }
+    h+='<div class="fg"><label class="fl">&#x1F4F7; Фото / видео к посту</label>';
+    var puppiesWithPhotos=[];
+    for(var i=0;i<puppies.length;i++){
+        if(puppies[i].photos&&puppies[i].photos.length>0)puppiesWithPhotos.push(i);
+    }
+    if(puppiesWithPhotos.length>0){
+        h+='<p style="font-size:12px;color:var(--text2);margin-bottom:8px">Фото щенка:</p>';
+        h+='<div class="media-puppy-select">';
+        for(var j=0;j<puppiesWithPhotos.length;j++){
+            var pi=puppiesWithPhotos[j],pp=puppies[pi];
+            h+='<button type="button" class="media-puppy-btn" data-act="selectPuppyMedia" data-arg="'+pi+'">';
+            h+='<img src="'+escA(pp.photos[0])+'" class="media-puppy-thumb">';
+            h+='<span>'+esc(pp.name)+'</span></button>';
+        }
+        h+='</div>';
+    }
+    h+='<div id="media-preview" class="media-preview-row"></div>';
+    h+='<input type="file" id="pub-media" accept="image/*,video/*" multiple class="fi" style="padding:10px;margin-top:8px">';
+    h+='<p style="font-size:11px;color:var(--text3);margin-top:4px">Прикрепите медиа — они будут отправлены боту при публикации</p></div>';
     h+='<div class="fg"><label class="fl">Пожелания</label>';
     h+='<textarea class="ft" id="pt-extra" placeholder="Упомянуть прививки, эмодзи..."></textarea></div>';
     h+='<button type="button" class="btn btn-primary" data-act="doGenPost">&#x1F916; Сгенерировать</button>';
     showModal("Создать пост",h);
+    var fileInput=document.getElementById("pub-media");
+    if(fileInput)fileInput.addEventListener("change",onPubMediaChange);
 }
 function genPost(i){
     var p=puppies[i];if(!p)return;
@@ -681,8 +705,28 @@ function fbCopy(t){
 // === PUBLISH ===
 function showPublish(){
     if(!pendingPost){toast("Нет текста","warn");return;}
+    pendingMedia=[];
     var h='<div class="fg"><div class="fl">Текст</div>';
-    h+='<div class="ai-box" style="max-height:150px">'+esc(pendingPost)+'</div></div>';
+    h+='<div class="ai-box" style="max-height:120px">'+esc(pendingPost)+'</div></div>';
+    h+='<div class="fg"><div class="fl">&#x1F4F7; Медиа к посту</div>';
+    var puppiesWithPhotos=[];
+    for(var i=0;i<puppies.length;i++){
+        if(puppies[i].photos&&puppies[i].photos.length>0)puppiesWithPhotos.push(i);
+    }
+    if(puppiesWithPhotos.length>0){
+        h+='<p style="font-size:12px;color:var(--text2);margin-bottom:8px">Выбрать фото щенка:</p>';
+        h+='<div class="media-puppy-select">';
+        for(var j=0;j<puppiesWithPhotos.length;j++){
+            var pi=puppiesWithPhotos[j],pp=puppies[pi];
+            h+='<button type="button" class="media-puppy-btn" data-act="selectPuppyMedia" data-arg="'+pi+'">';
+            h+='<img src="'+escA(pp.photos[0])+'" class="media-puppy-thumb">';
+            h+='<span>'+esc(pp.name)+'</span></button>';
+        }
+        h+='</div>';
+    }
+    h+='<div id="media-preview" class="media-preview-row"></div>';
+    h+='<input type="file" id="pub-media" accept="image/*,video/*" multiple class="fi" style="padding:10px;margin-top:8px">';
+    h+='<p style="font-size:11px;color:var(--text3);margin-top:4px">Добавьте фото/видео для публикации</p></div>';
     h+='<div class="fg"><div class="fl">Куда опубликовать</div>';
     h+='<label class="cb-label"><input type="checkbox" id="pub-tg" checked> &#x1F4E2; Telegram канал</label>';
     h+='<label class="cb-label"><input type="checkbox" id="pub-vk"> &#x1F310; ВКонтакте</label>';
@@ -690,6 +734,56 @@ function showPublish(){
     h+='<button type="button" class="btn btn-pink" data-act="doPublish">&#x1F680; Отправить боту</button>';
     if(!tg)h+='<p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">Telegram WebApp не доступен</p>';
     showModal("&#x1F4E4; Публикация",h);
+    var fileInput=document.getElementById("pub-media");
+    if(fileInput)fileInput.addEventListener("change",onPubMediaChange);
+}
+function onPubMediaChange(){
+    var fileInput=document.getElementById("pub-media");
+    if(!fileInput||!fileInput.files)return;
+    var files=Array.from(fileInput.files).slice(0,5);
+    toast("Обработка "+files.length+" файлов...","info");
+    Promise.all(files.map(function(f){
+        if(f.type.startsWith("video/")){
+            return new Promise(function(res){res({type:"video",name:f.name,size:f.size});});
+        }
+        return compressImage(f,800,600).then(function(d){return d?{type:"photo",data:d}:null;});
+    })).then(function(results){
+        pendingMedia=pendingMedia.concat(results.filter(Boolean)).slice(0,5);
+        renderMediaPreview();
+    });
+}
+function selectPuppyMedia(idx){
+    var p=puppies[idx];
+    if(!p||!p.photos||p.photos.length===0)return;
+    pendingPuppyIdx=idx;
+    for(var i=0;i<p.photos.length&&pendingMedia.length<5;i++){
+        pendingMedia.push({type:"photo",data:p.photos[i],fromPuppy:true});
+    }
+    renderMediaPreview();
+    haptic("success");
+    toast("Добавлено "+p.photos.length+" фото "+p.name,"ok");
+}
+function renderMediaPreview(){
+    var el=document.getElementById("media-preview");
+    if(!el)return;
+    if(pendingMedia.length===0){el.innerHTML="";return;}
+    var h='';
+    for(var i=0;i<pendingMedia.length;i++){
+        var m=pendingMedia[i];
+        if(m.type==="photo"&&m.data){
+            h+='<div class="media-thumb"><img src="'+escA(m.data)+'">';
+            h+='<button type="button" class="thumb-del" data-act="removeMediaItem" data-arg="'+i+'">&times;</button></div>';
+        }else if(m.type==="video"){
+            h+='<div class="media-thumb media-thumb-video"><span>&#x1F3AC;</span><span style="font-size:10px">'+esc(m.name||"video")+'</span>';
+            h+='<button type="button" class="thumb-del" data-act="removeMediaItem" data-arg="'+i+'">&times;</button></div>';
+        }
+    }
+    h+='<p style="font-size:11px;color:var(--text2);margin-top:6px;width:100%">'+pendingMedia.length+' медиа прикреплено</p>';
+    el.innerHTML=h;
+}
+function removeMediaItem(idx){
+    pendingMedia.splice(idx,1);
+    renderMediaPreview();
 }
 function doPublish(){
     var platforms=[];
@@ -697,10 +791,40 @@ function doPublish(){
     if(ck("pub-vk"))platforms.push("vk");
     if(ck("pub-ig"))platforms.push("instagram");
     if(platforms.length===0){toast("Выберите платформу","warn");return;}
+    var hasMedia=pendingMedia.length>0;
+    var photoData=[];
+    for(var i=0;i<pendingMedia.length;i++){
+        if(pendingMedia[i].type==="photo"&&pendingMedia[i].data)photoData.push(pendingMedia[i].data);
+    }
+    var hasVideo=pendingMedia.some(function(m){return m.type==="video";});
     if(tg){
-        try{tg.sendData(JSON.stringify({action:"publish",text:pendingPost,platforms:platforms}));}
-        catch(e){toast("Ошибка: "+e.message,"err");}
-    }else{copyText();toast("Скопировано (TG не доступен)","info");hideModal();}
+        try{
+            var payload={action:"publish",text:pendingPost,platforms:platforms,has_media:hasMedia,media_count:pendingMedia.length,has_video:hasVideo};
+            if(photoData.length>0){
+                var totalSize=JSON.stringify(payload).length;
+                var photoFits=photoData[0]&&(totalSize+photoData[0].length<3800);
+                if(photoFits){
+                    payload.photo_base64=photoData[0];
+                }else{
+                    payload.wait_for_media=true;
+                    payload.media_count=pendingMedia.length;
+                }
+            }else if(hasVideo){
+                payload.wait_for_media=true;
+            }
+            tg.sendData(JSON.stringify(payload));
+        }catch(e){
+            if(e.message&&e.message.indexOf("too long")>=0){
+                try{
+                    tg.sendData(JSON.stringify({action:"publish",text:pendingPost,platforms:platforms,wait_for_media:true,media_count:pendingMedia.length}));
+                }catch(e2){toast("Ошибка: "+e2.message,"err");}
+            }else{toast("Ошибка: "+e.message,"err");}
+        }
+    }else{
+        copyText();
+        toast("Скопировано (TG не доступен)","info");
+        hideModal();
+    }
 }
 function ck(id){var e=document.getElementById(id);return e&&e.checked;}
 
@@ -899,6 +1023,8 @@ function onWebAppDataActionClick(e){
                 aiHistory=[];saveAIHistory();renderContent();toast("История очищена","info");
             }
             break;
+        case "selectPuppyMedia":selectPuppyMedia(parseInt(arg,10));break;
+        case "removeMediaItem":removeMediaItem(parseInt(arg,10));break;
         default:break;
     }
 }

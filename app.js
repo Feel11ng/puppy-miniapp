@@ -256,8 +256,7 @@ function puppyCard(p,i){
     else{sb="Продан";sc="badge-sold";}
     var hasPhoto=p.photos&&p.photos.length>0;
     var c='<div class="card card-'+bc+' swipe-card" role="button" tabindex="0" data-puppy-card="'+i+'">';
-    c+='<div class="swipe-actions-left"><span>&#x1F5D1; Удалить</span></div>';
-    c+='<div class="swipe-actions-right"><span>&#x2705; Бронь</span></div>';
+    c+='<div class="swipe-label"></div>';
     c+='<div class="card-inner">';
     c+='<div class="card-row">';
     if(hasPhoto){
@@ -1149,21 +1148,36 @@ function initSwipe(){
         if(!swipeCard)return;
         var dx=e.touches[0].clientX-swipeStartX;
         var inner=swipeCard.querySelector(".card-inner");
+        var label=swipeCard.querySelector(".swipe-label");
         if(!inner)return;
         if(Math.abs(dx)>10){
-            swipeCard.classList.add("swiping");
             inner.style.transform="translateX("+Math.max(-80,Math.min(80,dx))+"px)";
             inner.style.transition="none";
+            if(label){
+                if(dx>0){
+                    label.textContent="\u2705 Бронь";
+                    label.style.background="#2ecc71";
+                    label.style.left="0";label.style.right="auto";
+                    label.style.textAlign="left";label.style.paddingLeft="16px";
+                }else{
+                    label.textContent="\uD83D\uDDD1 Удалить";
+                    label.style.background="#e74c3c";
+                    label.style.right="0";label.style.left="auto";
+                    label.style.textAlign="right";label.style.paddingRight="16px";
+                }
+                label.style.display="flex";
+            }
         }
     },{passive:true});
     document.addEventListener("touchend",function(e){
         if(!swipeCard)return;
         var inner=swipeCard.querySelector(".card-inner");
+        var label=swipeCard.querySelector(".swipe-label");
         if(!inner){swipeCard=null;return;}
         var dx=parseInt(inner.style.transform.replace(/[^-\d]/g,""))||0;
         inner.style.transition="transform .3s ease";
         inner.style.transform="translateX(0)";
-        swipeCard.classList.remove("swiping");
+        if(label)label.style.display="none";
         var idx=parseInt(swipeCard.getAttribute("data-puppy-card"),10);
         if(dx>60&&!isNaN(idx)){
             haptic("success");

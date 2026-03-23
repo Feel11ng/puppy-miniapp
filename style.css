@@ -564,16 +564,12 @@ font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;just
 .swipe-card{position:relative;overflow:hidden}
 .card-inner{position:relative;z-index:2;background:var(--card);
 border-radius:inherit;transition:transform .3s ease}
-.swipe-actions-left,.swipe-actions-right{
-position:absolute;top:0;bottom:0;width:80px;
-display:flex;align-items:center;justify-content:center;
-font-size:12px;font-weight:700;color:#fff;z-index:1;
-visibility:hidden;
+.swipe-label{
+position:absolute;top:0;bottom:0;left:0;right:0;
+display:none;align-items:center;
+font-size:14px;font-weight:700;color:#fff;z-index:1;
+border-radius:inherit;
 }
-.swipe-card.swiping .swipe-actions-left,
-.swipe-card.swiping .swipe-actions-right{visibility:visible}
-.swipe-actions-left{left:0;background:var(--danger);border-radius:var(--r) 0 0 var(--r)}
-.swipe-actions-right{right:0;background:var(--success);border-radius:0 var(--r) var(--r) 0}
 
 /* === SKELETON LOADER === */
 .skeleton-wrap{padding:8px 0}

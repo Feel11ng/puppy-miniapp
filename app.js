@@ -460,42 +460,69 @@ function renderPosts(el){
     }
     el.innerHTML=h;
 }
+var CONTENT_TYPES=[
+    {id:"photo",icon:"&#x1F305;",label:"Фото-пост",accept:"image/*",multi:false,hint:"Отправьте фото для поста"},
+    {id:"video",icon:"&#x1F3AC;",label:"Видео",accept:"video/*",multi:false,hint:"Отправьте видео"},
+    {id:"reel",icon:"&#x1F4F1;",label:"Reels",accept:"video/*",multi:false,hint:"Вертикальное видео до 90 сек"},
+    {id:"carousel",icon:"&#x1F5BC;",label:"Карусель",accept:"image/*",multi:true,hint:"Несколько фото (до 5)"},
+    {id:"story",icon:"&#x1F4F2;",label:"Stories",accept:"image/*,video/*",multi:false,hint:"Фото или видео для Stories"},
+    {id:"text",icon:"&#x1F4DD;",label:"Текстовый",accept:null,multi:false,hint:"Только текст без медиа"}
+];
+var selectedContentType="photo";
 function showCreatePost(){
     pendingMedia=[];
-    var h='<div class="fg"><label class="fl">Тип</label><select class="fs" id="pt-type">';
-    h+='<option value="sale">Продажа щенка</option>';
-    h+='<option value="info">Информационный</option>';
-    h+='<option value="avito">Для Авито</option></select></div>';
+    var h='<p style="font-size:13px;color:var(--text2);margin-bottom:12px">Выберите тип контента:</p>';
+    h+='<div class="content-type-grid">';
+    for(var i=0;i<CONTENT_TYPES.length;i++){
+        var ct=CONTENT_TYPES[i];
+        h+='<button type="button" class="content-type-btn" data-act="selectContentType" data-arg="'+ct.id+'">';
+        h+='<span class="content-type-icon">'+ct.icon+'</span>';
+        h+='<span class="content-type-label">'+ct.label+'</span></button>';
+    }
+    h+='</div>';
+    showModal("&#x1F4F7; Создание поста",h);
+}
+function selectContentType(typeId){
+    selectedContentType=typeId;
+    var ct=null;
+    for(var i=0;i<CONTENT_TYPES.length;i++){if(CONTENT_TYPES[i].id===typeId){ct=CONTENT_TYPES[i];break;}}
+    if(!ct)ct=CONTENT_TYPES[0];
+    haptic("light");
+    pendingMedia=[];
+    var h='<div class="selected-type-badge">'+ct.icon+' '+ct.label+'</div>';
+    if(ct.accept){
+        h+='<div class="fg"><label class="fl">'+ct.hint+'</label>';
+        var puppiesWithPhotos=[];
+        for(var i=0;i<puppies.length;i++){
+            if(puppies[i].photos&&puppies[i].photos.length>0)puppiesWithPhotos.push(i);
+        }
+        if(puppiesWithPhotos.length>0&&ct.accept.indexOf("image")>=0){
+            h+='<p style="font-size:12px;color:var(--text2);margin:8px 0">Фото щенка:</p>';
+            h+='<div class="media-puppy-select">';
+            for(var j=0;j<puppiesWithPhotos.length;j++){
+                var pi=puppiesWithPhotos[j],pp=puppies[pi];
+                h+='<button type="button" class="media-puppy-btn" data-act="selectPuppyMedia" data-arg="'+pi+'">';
+                h+='<img src="'+escA(pp.photos[0])+'" class="media-puppy-thumb">';
+                h+='<span>'+esc(pp.name)+'</span></button>';
+            }
+            h+='</div>';
+        }
+        h+='<div id="media-preview" class="media-preview-row"></div>';
+        h+='<input type="file" id="pub-media" accept="'+ct.accept+'"'+(ct.multi?' multiple':'')+' class="fi" style="padding:10px;margin-top:8px">';
+        h+='</div>';
+    }
     if(puppies.length>0){
         h+='<div class="fg"><label class="fl">Щенок</label><select class="fs" id="pt-pup">';
         h+='<option value="-1">Без привязки</option>';
-        for(var i=0;i<puppies.length;i++)
-            h+='<option value="'+i+'">'+esc(puppies[i].name)+' ('+breedName(puppies[i].breed)+')</option>';
+        for(var k=0;k<puppies.length;k++)
+            h+='<option value="'+k+'">'+esc(puppies[k].name)+' ('+breedName(puppies[k].breed)+')</option>';
         h+='</select></div>';
     }
-    h+='<div class="fg"><label class="fl">&#x1F4F7; Фото / видео к посту</label>';
-    var puppiesWithPhotos=[];
-    for(var i=0;i<puppies.length;i++){
-        if(puppies[i].photos&&puppies[i].photos.length>0)puppiesWithPhotos.push(i);
-    }
-    if(puppiesWithPhotos.length>0){
-        h+='<p style="font-size:12px;color:var(--text2);margin-bottom:8px">Фото щенка:</p>';
-        h+='<div class="media-puppy-select">';
-        for(var j=0;j<puppiesWithPhotos.length;j++){
-            var pi=puppiesWithPhotos[j],pp=puppies[pi];
-            h+='<button type="button" class="media-puppy-btn" data-act="selectPuppyMedia" data-arg="'+pi+'">';
-            h+='<img src="'+escA(pp.photos[0])+'" class="media-puppy-thumb">';
-            h+='<span>'+esc(pp.name)+'</span></button>';
-        }
-        h+='</div>';
-    }
-    h+='<div id="media-preview" class="media-preview-row"></div>';
-    h+='<input type="file" id="pub-media" accept="image/*,video/*" multiple class="fi" style="padding:10px;margin-top:8px">';
-    h+='<p style="font-size:11px;color:var(--text3);margin-top:4px">Прикрепите медиа — они будут отправлены боту при публикации</p></div>';
-    h+='<div class="fg"><label class="fl">Пожелания</label>';
-    h+='<textarea class="ft" id="pt-extra" placeholder="Упомянуть прививки, эмодзи..."></textarea></div>';
-    h+='<button type="button" class="btn btn-primary" data-act="doGenPost">&#x1F916; Сгенерировать</button>';
-    showModal("Создать пост",h);
+    h+='<div class="fg"><label class="fl">Стиль / пожелания</label>';
+    h+='<textarea class="ft" id="pt-extra" placeholder="Эмодзи, упомянуть прививки, стиль текста..."></textarea></div>';
+    h+='<button type="button" class="btn btn-primary" data-act="doGenPost" style="margin-bottom:8px">&#x1F916; Сгенерировать текст</button>';
+    h+='<button type="button" class="btn btn-secondary" data-act="showCreatePost">&#x2B05; Назад к типам</button>';
+    showModal("&#x1F4F7; "+ct.label,h);
     var fileInput=document.getElementById("pub-media");
     if(fileInput)fileInput.addEventListener("change",onPubMediaChange);
 }
@@ -517,28 +544,35 @@ function genPost(i){
 }
 function doGenPost(){
     if(!groqKey){askKey("Нужен Groq API ключ");return;}
-    var type=gv("pt-type","sale"),pi=parseInt(gv("pt-pup","-1")),extra=gv("pt-extra","");
+    var pi=parseInt(gv("pt-pup","-1")),extra=gv("pt-extra","");
+    var ct=selectedContentType||"text";
     var pr="";
-    if(type==="sale"&&pi>=0){
+    var typeHints={
+        photo:"Напиши текст для фото-поста в Instagram/Telegram",
+        video:"Напиши описание к видео в Instagram/Telegram",
+        reel:"Напиши короткое цепляющее описание для Reels (до 2200 знаков)",
+        carousel:"Напиши текст для карусели фото в Instagram",
+        story:"Напиши очень короткий текст для Stories (2-3 строки, призыв к действию)",
+        text:"Напиши информационный текстовый пост для Telegram-канала"
+    };
+    pr=(typeHints[ct]||typeHints.text)+" питомника мелких пород собак. ";
+    if(pi>=0&&puppies[pi]){
         var p=puppies[pi];
-        pr="Напиши пост продажи щенка. Порода: "+breedName(p.breed)+", кличка: "+p.name;
-        pr+=", пол: "+(p.gender==="male"?"мальчик":"девочка");
-        if(p.age)pr+=", возраст: "+p.age;
-        if(p.color)pr+=", окрас: "+p.color;
-        if(p.price)pr+=", цена: "+p.price+" руб";
+        pr+="О щенке: порода "+breedName(p.breed)+", кличка "+p.name;
+        pr+=", пол "+(p.gender==="male"?"мальчик":"девочка");
+        if(p.age)pr+=", возраст "+p.age;
+        if(p.color)pr+=", окрас "+p.color;
+        if(p.price)pr+=", цена "+p.price+" руб";
         if(p.parents)pr+=", родители: "+p.parents;
         if(p.documents)pr+=", документы: "+p.documents;
         if(p.vaccinationDate||p.vaccination_date)pr+=", прививки: "+(p.vaccinationDate||p.vaccination_date);
-        pr+=". С эмодзи и хештегами.";
-    }else if(type==="avito"){
-        pr="Напиши объявление для Авито о продаже щенка мелкой породы. Заголовок + описание, без хештегов. ";
-        if(pi>=0)pr+="Порода: "+breedName(puppies[pi].breed)+", кличка: "+puppies[pi].name+". ";
-    }else{
-        pr="Напиши информационный пост для Telegram-канала питомника мелких пород собак. С эмодзи.";
+        pr+=". ";
     }
+    pr+="С эмодзи и хештегами. На русском.";
     if(extra)pr+=" Дополнительно: "+extra;
-    pr+=" На русском.";
-    callAI(pr,"Сгенерированный пост");
+    var ctLabel="";
+    for(var i=0;i<CONTENT_TYPES.length;i++){if(CONTENT_TYPES[i].id===ct){ctLabel=CONTENT_TYPES[i].label;break;}}
+    callAI(pr,ctLabel||"Пост");
 }
 
 // === AI TAB ===
@@ -653,6 +687,24 @@ function showAIResult(title,text){
     pendingPost=text;
     lastTitle=title;
     var h='<div class="ai-box">'+esc(text)+'</div>';
+    h+='<div class="fg" style="margin-top:14px"><label class="fl">&#x1F4F7; Прикрепить медиа</label>';
+    var puppiesWithPhotos=[];
+    for(var i=0;i<puppies.length;i++){
+        if(puppies[i].photos&&puppies[i].photos.length>0)puppiesWithPhotos.push(i);
+    }
+    if(puppiesWithPhotos.length>0){
+        h+='<div class="media-puppy-select" style="margin-bottom:8px">';
+        for(var j=0;j<puppiesWithPhotos.length;j++){
+            var pi=puppiesWithPhotos[j],pp=puppies[pi];
+            h+='<button type="button" class="media-puppy-btn" data-act="selectPuppyMedia" data-arg="'+pi+'">';
+            h+='<img src="'+escA(pp.photos[0])+'" class="media-puppy-thumb">';
+            h+='<span>'+esc(pp.name)+'</span></button>';
+        }
+        h+='</div>';
+    }
+    h+='<div id="media-preview" class="media-preview-row"></div>';
+    h+='<input type="file" id="pub-media" accept="image/*,video/*" multiple class="fi" style="padding:10px">';
+    h+='</div>';
     h+='<div class="ai-actions">';
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="copyText">&#x1F4CB; Копировать</button>';
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="saveDraftFromAI">&#x1F4BE; В черновики</button>';
@@ -660,6 +712,8 @@ function showAIResult(title,text){
     h+='<button type="button" class="btn btn-sm btn-pink" data-act="showPublish">&#x1F4E4; Опубликовать</button>';
     h+='</div>';
     showModal("&#x1F916; "+title,h);
+    var fileInput=document.getElementById("pub-media");
+    if(fileInput)fileInput.addEventListener("change",onPubMediaChange);
 }
 
 function openDraftById(did){
@@ -799,7 +853,7 @@ function doPublish(){
     var hasVideo=pendingMedia.some(function(m){return m.type==="video";});
     if(tg){
         try{
-            var payload={action:"publish",text:pendingPost,platforms:platforms,has_media:hasMedia,media_count:pendingMedia.length,has_video:hasVideo};
+            var payload={action:"publish",text:pendingPost,platforms:platforms,has_media:hasMedia,media_count:pendingMedia.length,has_video:hasVideo,post_type:selectedContentType||"text"};
             if(photoData.length>0){
                 var totalSize=JSON.stringify(payload).length;
                 var photoFits=photoData[0]&&(totalSize+photoData[0].length<3800);
@@ -1025,6 +1079,8 @@ function onWebAppDataActionClick(e){
             break;
         case "selectPuppyMedia":selectPuppyMedia(parseInt(arg,10));break;
         case "removeMediaItem":removeMediaItem(parseInt(arg,10));break;
+        case "selectContentType":selectContentType(arg);break;
+        case "showCreatePost":showCreatePost();break;
         default:break;
     }
 }

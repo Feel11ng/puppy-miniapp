@@ -106,12 +106,17 @@ var swipeStartX=0;
 var swipeCard=null;
 var pendingMedia=[];
 var pendingPuppyIdx=-1;
+var acConfig={enabled:false,today:0,maxDay:100,hour:0,maxHour:30,total7d:0,targets:[],commentText:""};
 
 // === DATA ===
 function loadData(){
     try{var s=localStorage.getItem("ph_puppies");puppies=s?JSON.parse(s):[];}catch(e){puppies=[];}
     try{groqKey=localStorage.getItem("ph_groq")||"";}catch(e){groqKey="";}
     try{aiHistory=JSON.parse(localStorage.getItem("ph_ai_history")||"[]");}catch(e){aiHistory=[];}
+    try{var ac=localStorage.getItem("ph_ac_config");if(ac)acConfig=JSON.parse(ac);}catch(e){}
+}
+function saveAcConfig(){
+    try{localStorage.setItem("ph_ac_config",JSON.stringify(acConfig));}catch(e){}
 }
 function saveAIHistory(){
     try{localStorage.setItem("ph_ai_history",JSON.stringify(aiHistory.slice(0,30)));}catch(e){}
@@ -159,6 +164,9 @@ function switchTab(name){
     var fab=document.getElementById("fab");
     if(fab){fab.classList.toggle("hidden",name!=="puppies");
     fab.classList.toggle("pulse",name==="puppies"&&puppies.length===0);}
+    var sub=document.getElementById("header-sub");
+    if(sub&&name==="autocomment")sub.textContent="\uD83D\uDCAC \u0410\u0432\u0442\u043E\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 Instagram";
+    else if(sub&&name==="puppies")sub.textContent="\uD83D\uDC36 \u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0438\u0442\u043E\u043C\u043D\u0438\u043A\u043E\u043C";
 }
 
 // === RENDER ===
@@ -170,6 +178,7 @@ function renderContent(){
     if(currentTab==="puppies")renderPuppies(el);
     else if(currentTab==="posts")renderPosts(el);
     else if(currentTab==="ai")renderAI(el);
+    else if(currentTab==="autocomment")renderAutoComment(el);
 }
 
 // === PUPPIES LIST ===
@@ -1080,8 +1089,177 @@ function onWebAppDataActionClick(e){
         case "removeMediaItem":removeMediaItem(parseInt(arg,10));break;
         case "selectContentType":selectContentType(arg);break;
         case "showCreatePost":showCreatePost();break;
+        case "acToggle":acToggle();break;
+        case "acRunNow":acRunNow();break;
+        case "acEditTargets":acEditTargets();break;
+        case "acEditText":acEditText();break;
+        case "acEditLimits":acEditLimits();break;
+        case "acRemoveTarget":acRemoveTarget(arg);break;
         default:break;
     }
+}
+
+// === AUTOCOMMENT TAB ===
+function renderAutoComment(el){
+    var c=acConfig;
+    var pct=c.maxDay>0?Math.round(c.today/c.maxDay*100):0;
+    var h='<div class="card"><div class="card-title">&#x1F4AC; Автокомментирование Instagram</div>';
+    h+='<div class="card-body">';
+    h+='<div class="ac-status-row">';
+    h+='<span class="ac-status-dot '+(c.enabled?"ac-on":"ac-off")+'"></span>';
+    h+='<span style="font-weight:700;font-size:15px">'+(c.enabled?"\uD83D\uDFE2 Включено":"\uD83D\uDD34 Выключено")+'</span>';
+    h+='</div>';
+    h+='<div class="ac-progress" style="margin:12px 0">';
+    h+='<div class="ac-progress-bar" style="width:'+pct+'%"></div></div>';
+    h+='<div class="ac-stats">';
+    h+='<div class="ac-stat"><span class="ac-stat-num">'+c.today+'</span><span class="ac-stat-label">сегодня / '+c.maxDay+'</span></div>';
+    h+='<div class="ac-stat"><span class="ac-stat-num">'+c.hour+'</span><span class="ac-stat-label">за час / '+c.maxHour+'</span></div>';
+    h+='<div class="ac-stat"><span class="ac-stat-num">'+c.total7d+'</span><span class="ac-stat-label">за 7 дней</span></div>';
+    h+='</div></div></div>';
+    // Кнопки управления
+    h+='<div class="ac-actions">';
+    h+='<button type="button" class="btn '+(c.enabled?"btn-danger":"btn-primary")+'" data-act="acToggle">'+(c.enabled?"\uD83D\uDD34 Выключить":"\uD83D\uDFE2 Включить")+'</button>';
+    h+='<button type="button" class="btn btn-warning" data-act="acRunNow">\uD83D\uDE80 Запустить сейчас</button>';
+    h+='</div>';
+    // Целевые аккаунты
+    h+='<div class="card" style="margin-top:12px"><div class="card-title">\uD83C\uDFAF Целевые аккаунты</div>';
+    h+='<div class="card-body">';
+    var targets=c.targets||[];
+    if(targets.length>0){
+        h+='<div class="ac-targets">';
+        for(var i=0;i<targets.length;i++){
+            h+='<div class="ac-target">';
+            h+='<span>@'+esc(targets[i])+'</span>';
+            h+='<button type="button" class="ac-target-del" data-act="acRemoveTarget" data-arg="'+esc(targets[i])+'">&times;</button>';
+            h+='</div>';
+        }
+        h+='</div>';
+    }else{
+        h+='<p style="color:var(--text2);font-size:13px">Нет целевых аккаунтов</p>';
+    }
+    h+='<button type="button" class="btn btn-sm btn-secondary" style="margin-top:10px" data-act="acEditTargets">&#x2795; Добавить аккаунт</button>';
+    h+='</div></div>';
+    // Текст комментария
+    h+='<div class="card" style="margin-top:12px"><div class="card-title">&#x270F; Текст комментария</div>';
+    h+='<div class="card-body">';
+    var ct=c.commentText||"Не задан";
+    h+='<p style="font-size:13px;color:var(--text2);white-space:pre-wrap">'+esc(ct.length>150?ct.substring(0,150)+"...":ct)+'</p>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" style="margin-top:10px" data-act="acEditText">&#x270F; Изменить текст</button>';
+    h+='</div></div>';
+    // Лимиты
+    h+='<div class="card" style="margin-top:12px"><div class="card-title">&#x2699; Лимиты</div>';
+    h+='<div class="card-body">';
+    h+='<p style="font-size:13px;color:var(--text2)">\uD83D\uDCC5 Дневной: <b>'+c.maxDay+'</b> &nbsp; \u23F0 Часовой: <b>'+c.maxHour+'</b></p>';
+    h+='<p style="font-size:11px;color:var(--text3);margin-top:4px">Сеансы: 08:30, 12:30, 16:30, 20:30 (по '+Math.round(c.maxDay/4)+' за сеанс)</p>';
+    h+='<button type="button" class="btn btn-sm btn-secondary" style="margin-top:10px" data-act="acEditLimits">&#x2699; Настроить</button>';
+    h+='</div></div>';
+    // Подсказка
+    h+='<div class="card" style="margin-top:12px;opacity:.7"><div class="card-body" style="font-size:12px;color:var(--text3)">';
+    h+='&#x1F4A1; Бот автоматически находит популярные посты/видео в Instagram и оставляет рекламный комментарий. ';
+    h+='Работает с учётом лимитов для безопасности аккаунта.';
+    h+='</div></div>';
+    el.innerHTML=h;
+}
+function acToggle(){
+    acConfig.enabled=!acConfig.enabled;
+    saveAcConfig();
+    haptic(acConfig.enabled?"success":"warn");
+    renderContent();
+    // Отправляем боту
+    if(tg){
+        try{tg.sendData(JSON.stringify({action:"ac_toggle",enabled:acConfig.enabled}));}catch(e){}
+    }
+    toast(acConfig.enabled?"Автокомменты включены":"Автокомменты выключены",acConfig.enabled?"ok":"info");
+}
+function acRunNow(){
+    if(!tg){toast("Откройте через Telegram","warn");return;}
+    haptic("light");
+    toast("Отправлено боту — ожидайте отчёт","ok");
+    try{tg.sendData(JSON.stringify({action:"ac_run_now"}));}catch(e){toast("Ошибка: "+e,"warn");}
+}
+function acEditTargets(){
+    var h='<div class="fg"><label class="fl">Имя аккаунта Instagram</label>';
+    h+='<input type="text" class="fi" id="ac-new-target" placeholder="@username">';
+    h+='</div>';
+    h+='<button type="button" class="btn btn-primary" onclick="acAddTarget()">&#x2795; Добавить</button>';
+    var targets=acConfig.targets||[];
+    if(targets.length>0){
+        h+='<div style="margin-top:14px">';
+        for(var i=0;i<targets.length;i++){
+            h+='<div class="ac-target" style="margin-bottom:6px">';
+            h+='<span>@'+esc(targets[i])+'</span>';
+            h+='<button type="button" class="ac-target-del" data-act="acRemoveTarget" data-arg="'+esc(targets[i])+'">&times;</button>';
+            h+='</div>';
+        }
+        h+='</div>';
+    }
+    showModal("\uD83C\uDFAF Целевые аккаунты",h);
+}
+function acAddTarget(){
+    var inp=document.getElementById("ac-new-target");
+    if(!inp)return;
+    var v=inp.value.trim().replace(/^@/,"");
+    if(!v){toast("Введите имя","warn");return;}
+    if(!acConfig.targets)acConfig.targets=[];
+    if(acConfig.targets.indexOf(v)>=0){toast("Уже в списке","warn");return;}
+    acConfig.targets.push(v);
+    saveAcConfig();
+    haptic("success");
+    toast("@"+v+" добавлен","ok");
+    if(tg){try{tg.sendData(JSON.stringify({action:"ac_add_target",username:v}));}catch(e){}}
+    acEditTargets();
+}
+function acRemoveTarget(name){
+    if(!acConfig.targets)return;
+    var idx=acConfig.targets.indexOf(name);
+    if(idx>=0){
+        acConfig.targets.splice(idx,1);
+        saveAcConfig();
+        haptic("warn");
+        toast("@"+name+" удалён","info");
+        if(tg){try{tg.sendData(JSON.stringify({action:"ac_rm_target",username:name}));}catch(e){}}
+        renderContent();
+    }
+}
+function acEditText(){
+    var ct=acConfig.commentText||"";
+    var h='<div class="fg"><label class="fl">Текст комментария</label>';
+    h+='<textarea class="ft" id="ac-comment-text" rows="6" style="min-height:120px">'+esc(ct)+'</textarea>';
+    h+='</div>';
+    h+='<button type="button" class="btn btn-primary" onclick="acSaveText()">&#x1F4BE; Сохранить</button>';
+    showModal("\u270F Текст комментария",h);
+}
+function acSaveText(){
+    var ta=document.getElementById("ac-comment-text");
+    if(!ta)return;
+    acConfig.commentText=ta.value.trim();
+    saveAcConfig();
+    haptic("success");
+    toast("Текст сохранён","ok");
+    if(tg){try{tg.sendData(JSON.stringify({action:"ac_set_text",text:acConfig.commentText}));}catch(e){}}
+    closeModal();
+    renderContent();
+}
+function acEditLimits(){
+    var h='<div class="fg"><label class="fl">Дневной лимит (1-200)</label>';
+    h+='<input type="number" class="fi" id="ac-limit-day" value="'+acConfig.maxDay+'" min="1" max="200">';
+    h+='</div>';
+    h+='<div class="fg"><label class="fl">Часовой лимит (1-50)</label>';
+    h+='<input type="number" class="fi" id="ac-limit-hour" value="'+acConfig.maxHour+'" min="1" max="50">';
+    h+='</div>';
+    h+='<button type="button" class="btn btn-primary" onclick="acSaveLimits()">&#x1F4BE; Сохранить</button>';
+    showModal("\u2699 Лимиты",h);
+}
+function acSaveLimits(){
+    var d=parseInt(gv("ac-limit-day","100"),10),hr=parseInt(gv("ac-limit-hour","30"),10);
+    acConfig.maxDay=Math.max(1,Math.min(200,d||100));
+    acConfig.maxHour=Math.max(1,Math.min(50,hr||30));
+    saveAcConfig();
+    haptic("success");
+    toast("Лимиты сохранены","ok");
+    if(tg){try{tg.sendData(JSON.stringify({action:"ac_set_limits",max_day:acConfig.maxDay,max_hour:acConfig.maxHour}));}catch(e){}}
+    closeModal();
+    renderContent();
 }
 
 function onWebAppPuppyCardClick(e){

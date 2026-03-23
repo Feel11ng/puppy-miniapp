@@ -1,4 +1,4 @@
-/* === PUPPYHUB MINI APP v4 === */
+/* === PUPPYHUB MINI APP v5 — Full UX Upgrade === */
 // Telegram
 var tg=null;
 try{if(window.Telegram&&window.Telegram.WebApp){tg=window.Telegram.WebApp;tg.expand();tg.ready();}}catch(e){}
@@ -101,11 +101,18 @@ var uiSearch="";
 var uiFilterStatus="all";
 var uiFilterBreed="all";
 var uiSort="new";
+var aiHistory=[];
+var swipeStartX=0;
+var swipeCard=null;
 
 // === DATA ===
 function loadData(){
     try{var s=localStorage.getItem("ph_puppies");puppies=s?JSON.parse(s):[];}catch(e){puppies=[];}
     try{groqKey=localStorage.getItem("ph_groq")||"";}catch(e){groqKey="";}
+    try{aiHistory=JSON.parse(localStorage.getItem("ph_ai_history")||"[]");}catch(e){aiHistory=[];}
+}
+function saveAIHistory(){
+    try{localStorage.setItem("ph_ai_history",JSON.stringify(aiHistory.slice(0,30)));}catch(e){}
 }
 function saveData(){
     localStorage.setItem("ph_puppies",JSON.stringify(puppies));
@@ -155,6 +162,9 @@ function switchTab(name){
 // === RENDER ===
 function renderContent(){
     var el=document.getElementById("content");if(!el)return;
+    el.classList.remove("tab-enter");
+    void el.offsetWidth;
+    el.classList.add("tab-enter");
     if(currentTab==="puppies")renderPuppies(el);
     else if(currentTab==="posts")renderPosts(el);
     else if(currentTab==="ai")renderAI(el);
@@ -242,9 +252,17 @@ function puppyCard(p,i){
     if(p.status==="available"){sb="Свободен";sc="badge-ok";}
     else if(p.status==="reserved"){sb="Бронь";sc="badge-res";}
     else{sb="Продан";sc="badge-sold";}
-    var c='<div class="card card-'+bc+'" role="button" tabindex="0" data-puppy-card="'+i+'">';
+    var hasPhoto=p.photos&&p.photos.length>0;
+    var c='<div class="card card-'+bc+' swipe-card" role="button" tabindex="0" data-puppy-card="'+i+'">';
+    c+='<div class="swipe-actions-left"><span>&#x2705; Бронь</span></div>';
+    c+='<div class="swipe-actions-right"><span>&#x1F5D1; Удалить</span></div>';
+    c+='<div class="card-inner">';
     c+='<div class="card-row">';
-    c+='<div class="avatar avatar-'+bc+'">'+av+'</div>';
+    if(hasPhoto){
+        c+='<div class="avatar-photo" style="background-image:url('+escA(p.photos[0])+')"></div>';
+    }else{
+        c+='<div class="avatar avatar-'+bc+'">'+av+'</div>';
+    }
     c+='<div class="card-info">';
     c+='<div class="card-header"><div><div class="card-title">'+esc(p.name)+' '+gn+'</div>';
     c+='<div class="card-sub">'+esc(bn)+'</div></div>';
@@ -253,17 +271,34 @@ function puppyCard(p,i){
     if(p.age)c+='<span>&#x1F4C5; '+esc(p.age)+'</span>';
     if(p.color)c+='<span>&#x1F3A8; '+esc(p.color)+'</span>';
     if(p.price)c+='<span class="price">'+fmtPrice(p.price)+' &#x20BD;</span>';
-    c+='</div></div></div></div>';
+    c+='</div></div></div></div></div>';
     return c;
 }
 
 // === DETAIL ===
 function showDetail(i){
     var p=puppies[i];if(!p)return;
+    haptic("light");
     var bn=breedName(p.breed);
     var gn=p.gender==="male"?"&#x2642;&#xFE0F; Мальчик":"&#x2640;&#xFE0F; Девочка";
-    var h='<div style="text-align:center;margin-bottom:16px">';
-    h+='<div class="avatar avatar-'+breedClass(p.breed)+'" style="width:72px;height:72px;font-size:36px;margin:0 auto">'+breedEmoji(p.breed)+'</div></div>';
+    var h='';
+    if(p.photos&&p.photos.length>0){
+        h+='<div class="photo-carousel" id="carousel-'+i+'">';
+        for(var pi=0;pi<p.photos.length;pi++){
+            h+='<img class="carousel-img" src="'+escA(p.photos[pi])+'" alt="'+escA(p.name)+'">';
+        }
+        h+='</div>';
+        if(p.photos.length>1)h+='<div class="carousel-dots" id="dots-'+i+'">';
+        if(p.photos.length>1){for(var di=0;di<p.photos.length;di++)h+='<span class="dot'+(di===0?" active":"")+'"></span>';h+='</div>';}
+    }else{
+        h+='<div style="text-align:center;margin-bottom:16px">';
+        h+='<div class="avatar avatar-'+breedClass(p.breed)+'" style="width:72px;height:72px;font-size:36px;margin:0 auto">'+breedEmoji(p.breed)+'</div></div>';
+    }
+    h+='<div class="detail-status-row">';
+    h+='<button type="button" class="btn btn-sm '+(p.status==="available"?"btn-success":"btn-secondary")+'" data-act="setStatus" data-arg="'+i+':available">Свободен</button>';
+    h+='<button type="button" class="btn btn-sm '+(p.status==="reserved"?"btn-warning":"btn-secondary")+'" data-act="setStatus" data-arg="'+i+':reserved">Бронь</button>';
+    h+='<button type="button" class="btn btn-sm '+(p.status==="sold"?"btn-danger":"btn-secondary")+'" data-act="setStatus" data-arg="'+i+':sold">Продан</button>';
+    h+='</div>';
     h+=fRow("Порода",bn)+fRow("Пол",gn);
     if(p.age)h+=fRow("Возраст",esc(p.age));
     if(p.color)h+=fRow("Окрас",esc(p.color));
@@ -278,6 +313,7 @@ function showDetail(i){
     h+='<button type="button" class="btn btn-sm btn-danger" data-act="delPuppy" data-arg="'+i+'">&#x1F5D1; Удалить</button>';
     h+='</div>';
     showModal(esc(p.name),h);
+    if(p.photos&&p.photos.length>1)initCarousel(i,p.photos.length);
 }
 function fRow(l,v){return '<div class="fg"><div class="fl">'+l+'</div><div>'+v+'</div></div>';}
 
@@ -313,25 +349,73 @@ function buildForm(p,idx){
     h+='<input type="text" class="fi" id="pf-vac" value="'+escA(vac)+'" placeholder="например 15.01.2025 или щенячьи"></div>';
     h+='<div class="fg"><label class="fl">Описание</label>';
     h+='<textarea class="ft" id="pf-d" placeholder="О щенке...">'+esc(desc)+'</textarea></div>';
+    h+='<div class="fg"><label class="fl">Фото щенка</label>';
+    if(p&&p.photos&&p.photos.length>0){
+        h+='<div class="photo-thumbs" id="pf-thumbs">';
+        for(var ti=0;ti<p.photos.length;ti++){
+            h+='<div class="photo-thumb"><img src="'+escA(p.photos[ti])+'"><button type="button" class="thumb-del" data-act="removePhoto" data-arg="'+idx+':'+ti+'">&times;</button></div>';
+        }
+        h+='</div>';
+    }
+    h+='<input type="file" id="pf-photos" accept="image/*" multiple class="fi" style="padding:10px">';
+    h+='<p style="font-size:11px;color:var(--text3);margin-top:4px">До 5 фото, макс 800KB каждое (сжимается автоматически)</p></div>';
     h+='<button type="button" class="btn btn-success" data-act="savePuppy" data-arg="'+idx+'">&#x1F4BE; Сохранить</button>';
     return h;
 }
 function opt(v,t,s){return '<option value="'+v+'"'+(v===s?' selected':'')+'>'+t+'</option>';}
+function compressImage(file,maxW,maxKB){
+    maxW=maxW||600;maxKB=maxKB||800;
+    return new Promise(function(resolve){
+        var reader=new FileReader();
+        reader.onload=function(ev){
+            var img=new Image();
+            img.onload=function(){
+                var w=img.width,h=img.height;
+                if(w>maxW){h=Math.round(h*(maxW/w));w=maxW;}
+                var canvas=document.createElement("canvas");
+                canvas.width=w;canvas.height=h;
+                var ctx=canvas.getContext("2d");
+                ctx.drawImage(img,0,0,w,h);
+                var q=0.82;
+                var dataUrl=canvas.toDataURL("image/jpeg",q);
+                while(dataUrl.length>maxKB*1370&&q>0.3){q-=0.1;dataUrl=canvas.toDataURL("image/jpeg",q);}
+                resolve(dataUrl);
+            };
+            img.onerror=function(){resolve(null);};
+            img.src=ev.target.result;
+        };
+        reader.onerror=function(){resolve(null);};
+        reader.readAsDataURL(file);
+    });
+}
 function savePuppy(idx){
     var ne=document.getElementById("pf-n");
     if(!ne||!ne.value.trim()){toast("Введите кличку!","warn");return;}
-    var d={
-        id:(idx>=0&&puppies[idx])?puppies[idx].id:genId(),
-        name:ne.value.trim(),breed:gv("pf-b","chihuahua"),gender:gv("pf-g","female"),
-        age:gv("pf-a",""),color:gv("pf-c",""),price:gv("pf-p",""),
-        status:gv("pf-s","available"),description:gv("pf-d",""),
-        parents:gv("pf-par",""),documents:gv("pf-doc",""),
-        vaccinationDate:gv("pf-vac",""),
-        created:(idx>=0&&puppies[idx])?puppies[idx].created:new Date().toISOString()
-    };
-    if(idx>=0)puppies[idx]=d;else puppies.push(d);
-    saveData();hideModal();renderContent();
-    toast(idx>=0?"Щенок обновлён ✅":"Щенок добавлен ✅","ok");
+    var fileInput=document.getElementById("pf-photos");
+    var files=fileInput&&fileInput.files?Array.from(fileInput.files):[];
+    if(files.length>5)files=files.slice(0,5);
+    var existingPhotos=(idx>=0&&puppies[idx]&&puppies[idx].photos)?puppies[idx].photos.slice():[];
+    function doSave(newPhotos){
+        var allPhotos=existingPhotos.concat(newPhotos||[]).slice(0,5);
+        var d={
+            id:(idx>=0&&puppies[idx])?puppies[idx].id:genId(),
+            name:ne.value.trim(),breed:gv("pf-b","chihuahua"),gender:gv("pf-g","female"),
+            age:gv("pf-a",""),color:gv("pf-c",""),price:gv("pf-p",""),
+            status:gv("pf-s","available"),description:gv("pf-d",""),
+            parents:gv("pf-par",""),documents:gv("pf-doc",""),
+            vaccinationDate:gv("pf-vac",""),
+            photos:allPhotos,
+            created:(idx>=0&&puppies[idx])?puppies[idx].created:new Date().toISOString()
+        };
+        if(idx>=0)puppies[idx]=d;else puppies.push(d);
+        saveData();hideModal();renderContent();
+        toast(idx>=0?"Щенок обновлён ✅":"Щенок добавлен ✅","ok");
+    }
+    if(files.length===0){doSave([]);return;}
+    toast("Сжимаю фото...","info");
+    Promise.all(files.map(function(f){return compressImage(f);}))
+    .then(function(results){doSave(results.filter(Boolean));})
+    .catch(function(){doSave([]);});
 }
 function gv(id,def){var e=document.getElementById(id);return e?e.value.trim():def;}
 function delPuppy(i){
@@ -434,6 +518,14 @@ function doGenPost(){
 }
 
 // === AI TAB ===
+var POST_TEMPLATES=[
+    {id:"sale",label:"Продажа",icon:"&#x1F4B0;",prompt:"Напиши привлекательный пост для Instagram/Telegram о продаже щенка мелкой породы. С эмодзи и хештегами. На русском."},
+    {id:"story",label:"Stories",icon:"&#x1F4F1;",prompt:"Напиши короткий текст для Instagram Stories о питомнике мелких пород. Максимум 3 строки, эмодзи, призыв к действию. На русском."},
+    {id:"reels",label:"Reels",icon:"&#x1F3AC;",prompt:"Напиши описание для Instagram Reels видео про щенков мелких пород. Короткое, цепляющее, с хештегами. На русском."},
+    {id:"educational",label:"Полезный",icon:"&#x1F4DA;",prompt:"Напиши познавательный пост для Telegram-канала питомника о уходе за щенками мелких пород. Полезные советы, эмодзи. На русском."},
+    {id:"welcome",label:"Приветствие",icon:"&#x1F44B;",prompt:"Напиши приветственный пост для нового подписчика канала питомника мелких пород. Тёплый, дружелюбный, с эмодзи. На русском."},
+    {id:"holiday",label:"Праздничный",icon:"&#x1F389;",prompt:"Напиши праздничный пост для канала питомника. Поздравление с ближайшим праздником, тёплые слова, фото-призыв. На русском."}
+];
 function renderAI(el){
     var ks=groqKey?"&#x2705; Ключ сохранён":"&#x274C; Ключ не задан — укажите в настройках";
     var h='<div class="card"><div class="card-title">&#x1F916; AI Ассистент</div>';
@@ -445,6 +537,13 @@ function renderAI(el){
     h+='<textarea class="ft" id="ai-q" placeholder="Задайте любой вопрос..."></textarea>';
     h+='<button type="button" class="btn btn-primary" style="margin-top:8px" data-act="doFreeAI">&#x1F680; Отправить</button>';
     h+='</div></div>';
+    h+='<div class="card"><div class="card-title">&#x1F4CB; Шаблоны постов</div>';
+    h+='<div class="card-actions" style="margin-top:8px">';
+    for(var ti=0;ti<POST_TEMPLATES.length;ti++){
+        var tmpl=POST_TEMPLATES[ti];
+        h+='<button type="button" class="btn btn-sm btn-ghost" data-act="useTemplate" data-arg="'+tmpl.id+'">'+tmpl.icon+' '+esc(tmpl.label)+'</button>';
+    }
+    h+='</div></div>';
     h+='<div class="card"><div class="card-title">&#x26A1; Быстрые действия</div>';
     h+='<div class="card-actions" style="margin-top:8px">';
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="hashtags">&#x1F3F7; Хештеги</button>';
@@ -452,6 +551,20 @@ function renderAI(el){
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="tips">&#x1F4A1; Советы</button>';
     h+='<button type="button" class="btn btn-sm btn-secondary" data-act="aiQ" data-arg="names">&#x1F4DB; Имена</button>';
     h+='</div></div>';
+    if(aiHistory.length>0){
+        h+='<div class="card"><div class="card-title">&#x1F4DC; История генераций ('+aiHistory.length+')</div>';
+        h+='<div class="card-body">';
+        var showCount=Math.min(aiHistory.length,10);
+        for(var hi=0;hi<showCount;hi++){
+            var ah=aiHistory[hi];
+            h+='<button type="button" class="draft-card" data-act="openAIHistory" data-arg="'+hi+'">';
+            h+='<div class="draft-card-title">'+esc(ah.title||"")+'</div>';
+            h+='<div class="draft-card-preview">'+esc(String(ah.text||"").substring(0,100))+'</div></button>';
+        }
+        if(aiHistory.length>10)h+='<p style="font-size:11px;color:var(--text3);margin-top:8px">...и ещё '+(aiHistory.length-10)+'</p>';
+        h+='<button type="button" class="btn btn-sm btn-danger" style="margin-top:10px" data-act="clearAIHistory">&#x1F5D1; Очистить историю</button>';
+        h+='</div></div>';
+    }
     el.innerHTML=h;
 }
 function aiQ(act){
@@ -470,10 +583,21 @@ function doFreeAI(){
 }
 
 // === GROQ API ===
+function skeletonHTML(){
+    var h='<div class="skeleton-wrap">';
+    h+='<div class="skeleton-line w100"></div>';
+    h+='<div class="skeleton-line w80"></div>';
+    h+='<div class="skeleton-line w90"></div>';
+    h+='<div class="skeleton-line w60"></div>';
+    h+='<div class="skeleton-line w100"></div>';
+    h+='<div class="skeleton-line w70"></div>';
+    h+='<p style="margin-top:14px;color:var(--text3);font-size:12px;text-align:center">Генерирую текст...</p></div>';
+    return h;
+}
 function callAI(prompt,title){
     lastPrompt=prompt;
     lastTitle=title;
-    showModal("&#x1F916; "+title,'<div class="loader"><div class="spinner"></div><p style="margin-top:12px;color:var(--text2)">Генерирую...</p></div>');
+    showModal("&#x1F916; "+title,skeletonHTML());
     fetch("https://api.groq.com/openai/v1/chat/completions",{
         method:"POST",
         headers:{"Content-Type":"application/json","Authorization":"Bearer "+groqKey},
@@ -490,6 +614,8 @@ function callAI(prompt,title){
     .then(function(d){
         var text=(d.choices&&d.choices[0]&&d.choices[0].message)?d.choices[0].message.content:"Нет ответа";
         pendingPost=text;
+        aiHistory.unshift({id:genId(),title:title,text:text,at:new Date().toISOString()});
+        saveAIHistory();
         showAIResult(title,text);
     })
     .catch(function(e){
@@ -745,6 +871,34 @@ function onWebAppDataActionClick(e){
         case "delDraft":
             if(confirm("Удалить черновик?"))deleteDraftById(arg);
             break;
+        case "removePhoto":
+            var rp=String(arg||"").split(":");
+            if(rp.length===2)removePhoto(parseInt(rp[0],10),parseInt(rp[1],10));
+            break;
+        case "setStatus":
+            var sp=String(arg||"").split(":");
+            if(sp.length===2)setStatus(parseInt(sp[0],10),sp[1]);
+            break;
+        case "useTemplate":
+            if(!groqKey){askKey("Нужен Groq API ключ");break;}
+            for(var ti=0;ti<POST_TEMPLATES.length;ti++){
+                if(POST_TEMPLATES[ti].id===arg){callAI(POST_TEMPLATES[ti].prompt,POST_TEMPLATES[ti].label);break;}
+            }
+            break;
+        case "openAIHistory":
+            var ahi=parseInt(arg,10);
+            if(!isNaN(ahi)&&aiHistory[ahi]){
+                pendingPost=aiHistory[ahi].text||"";
+                lastTitle=aiHistory[ahi].title||"";
+                lastPrompt="";
+                showAIResult(lastTitle,pendingPost);
+            }
+            break;
+        case "clearAIHistory":
+            if(confirm("Очистить всю историю AI?")){
+                aiHistory=[];saveAIHistory();renderContent();toast("История очищена","info");
+            }
+            break;
         default:break;
     }
 }
@@ -785,6 +939,86 @@ function bindWebAppUi(){
     });
 }
 
+// === CAROUSEL ===
+function initCarousel(puppyIdx,count){
+    setTimeout(function(){
+        var el=document.getElementById("carousel-"+puppyIdx);
+        if(!el)return;
+        el.addEventListener("scroll",function(){
+            var dots=document.getElementById("dots-"+puppyIdx);
+            if(!dots)return;
+            var scrollLeft=el.scrollLeft,w=el.offsetWidth;
+            var idx=Math.round(scrollLeft/w);
+            var dd=dots.querySelectorAll(".dot");
+            for(var k=0;k<dd.length;k++)dd[k].classList.toggle("active",k===idx);
+        });
+    },100);
+}
+
+// === SWIPE ACTIONS ===
+function initSwipe(){
+    document.addEventListener("touchstart",function(e){
+        var card=e.target.closest(".swipe-card");
+        if(!card)return;
+        swipeStartX=e.touches[0].clientX;
+        swipeCard=card;
+    },{passive:true});
+    document.addEventListener("touchmove",function(e){
+        if(!swipeCard)return;
+        var dx=e.touches[0].clientX-swipeStartX;
+        var inner=swipeCard.querySelector(".card-inner");
+        if(!inner)return;
+        if(Math.abs(dx)>10){
+            inner.style.transform="translateX("+Math.max(-80,Math.min(80,dx))+"px)";
+            inner.style.transition="none";
+        }
+    },{passive:true});
+    document.addEventListener("touchend",function(e){
+        if(!swipeCard)return;
+        var inner=swipeCard.querySelector(".card-inner");
+        if(!inner){swipeCard=null;return;}
+        var dx=parseInt(inner.style.transform.replace(/[^-\d]/g,""))||0;
+        inner.style.transition="transform .3s ease";
+        inner.style.transform="translateX(0)";
+        var idx=parseInt(swipeCard.getAttribute("data-puppy-card"),10);
+        if(dx>60&&!isNaN(idx)){
+            haptic("success");
+            if(puppies[idx]){
+                puppies[idx].status=puppies[idx].status==="reserved"?"available":"reserved";
+                saveData();renderContent();
+                toast(puppies[idx].status==="reserved"?"Забронирован":"Снята бронь","ok");
+            }
+        }else if(dx<-60&&!isNaN(idx)){
+            haptic("warn");
+            if(puppies[idx]&&confirm("Удалить "+puppies[idx].name+"?")){
+                puppies.splice(idx,1);saveData();renderContent();toast("Удалён","info");
+            }
+        }
+        swipeCard=null;
+    },{passive:true});
+}
+
+// === PHOTO HELPERS ===
+function removePhoto(idx,photoIdx){
+    if(!puppies[idx])return;
+    if(!puppies[idx].photos)return;
+    puppies[idx].photos.splice(photoIdx,1);
+    saveData();
+    editPuppy(idx);
+    toast("Фото удалено","info");
+}
+
+// === STATUS QUICK CHANGE ===
+function setStatus(idx,status){
+    if(!puppies[idx])return;
+    puppies[idx].status=status;
+    saveData();
+    haptic("success");
+    showDetail(idx);
+    renderContent();
+    toast("Статус обновлён","ok");
+}
+
 // === UTILS ===
 function esc(t){if(!t)return"";return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function escA(t){if(!t)return"";return String(t).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -802,12 +1036,13 @@ document.addEventListener("DOMContentLoaded",function(){
     }catch(e){applyTheme("midnight-indigo");}
     applyCustomAccentFromStorage();
     bindWebAppUi();
+    initSwipe();
     loadData();renderContent();
     var fab=document.getElementById("fab");
     if(fab){fab.classList.remove("hidden");if(puppies.length===0)fab.classList.add("pulse");}
     var sub=document.getElementById("header-sub");
     if(sub&&puppies.length>0)sub.innerHTML="\uD83D\uDC36 "+puppies.length+" "+pluralPuppy(puppies.length);
-    console.log("PuppyHub v3 loaded. Puppies:",puppies.length,"Groq:",groqKey?"yes":"no");
+    console.log("PuppyHub v5 loaded. Puppies:",puppies.length,"Groq:",groqKey?"yes":"no");
 });
 function pluralPuppy(n){
     if(n%10===1&&n%100!==11)return "щенок";

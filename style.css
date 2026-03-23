@@ -572,8 +572,8 @@ visibility:hidden;
 }
 .swipe-card.swiping .swipe-actions-left,
 .swipe-card.swiping .swipe-actions-right{visibility:visible}
-.swipe-actions-left{left:0;background:var(--success);border-radius:var(--r) 0 0 var(--r)}
-.swipe-actions-right{right:0;background:var(--danger);border-radius:0 var(--r) var(--r) 0}
+.swipe-actions-left{left:0;background:var(--danger);border-radius:var(--r) 0 0 var(--r)}
+.swipe-actions-right{right:0;background:var(--success);border-radius:0 var(--r) var(--r) 0}
 
 /* === SKELETON LOADER === */
 .skeleton-wrap{padding:8px 0}

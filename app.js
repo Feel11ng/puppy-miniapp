@@ -256,8 +256,8 @@ function puppyCard(p,i){
     else{sb="Продан";sc="badge-sold";}
     var hasPhoto=p.photos&&p.photos.length>0;
     var c='<div class="card card-'+bc+' swipe-card" role="button" tabindex="0" data-puppy-card="'+i+'">';
-    c+='<div class="swipe-actions-left"><span>&#x2705; Бронь</span></div>';
-    c+='<div class="swipe-actions-right"><span>&#x1F5D1; Удалить</span></div>';
+    c+='<div class="swipe-actions-left"><span>&#x1F5D1; Удалить</span></div>';
+    c+='<div class="swipe-actions-right"><span>&#x2705; Бронь</span></div>';
     c+='<div class="card-inner">';
     c+='<div class="card-row">';
     if(hasPhoto){

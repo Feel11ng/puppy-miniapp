@@ -1151,6 +1151,7 @@ function initSwipe(){
         var inner=swipeCard.querySelector(".card-inner");
         if(!inner)return;
         if(Math.abs(dx)>10){
+            swipeCard.classList.add("swiping");
             inner.style.transform="translateX("+Math.max(-80,Math.min(80,dx))+"px)";
             inner.style.transition="none";
         }
@@ -1162,6 +1163,7 @@ function initSwipe(){
         var dx=parseInt(inner.style.transform.replace(/[^-\d]/g,""))||0;
         inner.style.transition="transform .3s ease";
         inner.style.transform="translateX(0)";
+        swipeCard.classList.remove("swiping");
         var idx=parseInt(swipeCard.getAttribute("data-puppy-card"),10);
         if(dx>60&&!isNaN(idx)){
             haptic("success");

@@ -106,7 +106,7 @@ var swipeStartX=0;
 var swipeCard=null;
 var pendingMedia=[];
 var pendingPuppyIdx=-1;
-var acConfig={enabled:false,today:0,maxDay:100,hour:0,maxHour:30,total7d:0,targets:[],commentText:""};
+var acConfig={enabled:false,today:0,maxDay:100,hour:0,maxHour:30,total7d:0,targets:[],commentText:"",history:[]};
 
 // === DATA ===
 function loadData(){
@@ -1153,6 +1153,26 @@ function renderAutoComment(el){
     h+='<p style="font-size:11px;color:var(--text3);margin-top:4px">Сеансы: 08:30, 12:30, 16:30, 20:30 (по '+Math.round(c.maxDay/4)+' за сеанс)</p>';
     h+='<button type="button" class="btn btn-sm btn-secondary" style="margin-top:10px" data-act="acEditLimits">&#x2699; Настроить</button>';
     h+='</div></div>';
+    // История
+    h+='<div class="card" style="margin-top:12px"><div class="card-title">\uD83D\uDCDC История последних комментариев</div>';
+    h+='<div class="card-body" style="padding:0">';
+    var hist=c.history||[];
+    if(hist.length>0){
+        h+='<div class="ac-history-list">';
+        for(var i=0;i<hist.length;i++){
+            var ch=hist[i];
+            var dt=new Date(ch.at).toLocaleString('ru-RU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+            h+='<div class="ac-hist-item">';
+            h+='<div class="ac-hist-head"><b>'+dt+'</b> \u2192 <a href="'+(ch.url||'#')+'" target="_blank">@'+esc(ch.username)+'</a></div>';
+            h+='<div class="ac-hist-text">'+esc(ch.text)+'</div>';
+            h+='</div>';
+        }
+        h+='</div>';
+    }else{
+        h+='<p style="padding:15px;color:var(--text3);font-size:13px">История пока пуста</p>';
+    }
+    h+='</div></div>';
+
     // Подсказка
     h+='<div class="card" style="margin-top:12px;opacity:.7"><div class="card-body" style="font-size:12px;color:var(--text3)">';
     h+='&#x1F4A1; Бот автоматически находит популярные посты/видео в Instagram и оставляет рекламный комментарий. ';

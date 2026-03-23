@@ -645,3 +645,12 @@ padding:8px 12px;background:var(--bg3);border-radius:var(--r-xs);font-size:13px;
 background:rgba(231,76,60,.15);color:#e74c3c;font-size:16px;cursor:pointer;
 display:flex;align-items:center;justify-content:center;transition:background .2s}
 .ac-target-del:hover{background:rgba(231,76,60,.3)}
+
+/* === AC HISTORY === */
+.ac-history-list { display: flex; flex-direction: column; }
+.ac-hist-item { padding: 12px 15px; border-bottom: 1px solid var(--bg1); }
+.ac-hist-item:last-child { border-bottom: none; }
+.ac-hist-head { font-size: 13px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.ac-hist-head a { color: var(--accent); text-decoration: none; font-weight: 700; }
+.ac-hist-text { font-size: 12px; color: var(--text2); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ac-hist-item:hover .ac-hist-text { -webkit-line-clamp: unset; }
